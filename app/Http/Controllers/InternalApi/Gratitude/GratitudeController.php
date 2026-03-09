@@ -290,7 +290,7 @@ class GratitudeController extends Controller
             $pointsToNextLevel = 30001 - $rollingTotalActive;
         }
 
-        return response()->json([
+        $data = [
             'gratitude' => $gratitude,
             'earned_points' => $earnedPoints,
             'bonus_points' => $bonusPoints,
@@ -299,7 +299,11 @@ class GratitudeController extends Controller
             'next_level' => $nextLevel,
             'points_to_next_level' => $pointsToNextLevel,
             'rolling_tier_points' => $rollingTotalActive
-        ]);
+        ];
+
+        // dd($data);
+
+        return response()->json($data);
     }
 
     public function apiAddEarned(Request $request, $gratitudeNumber)
