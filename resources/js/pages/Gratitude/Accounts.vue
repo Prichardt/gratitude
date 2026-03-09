@@ -47,18 +47,16 @@ onMounted(() => {
 });
 
 const handleApiImport = async () => {
-    if (!confirm('Are you sure you want to pull the latest data from the API?')) return;
+    if (!window.confirm('Are you sure you want to pull the latest data from the API?')) return;
     
     importing.value = true;
     try {
-        const response = await axios.get(route('internal-api.gratitude.import'));
-     
-        alert('Data imported successfully!');
-        
+        await axios.get('/internal-api/gratitude/migrate-data');
         await fetchAccountsData();
+        window.alert('Data imported successfully!');
     } catch (e) {
         console.error(e);
-        alert('Failed to import data from API.');
+        window.alert('Failed to import data from API.');
     } finally {
         importing.value = false;
     }
@@ -81,7 +79,7 @@ const getStatusBadge = (status: string) => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <Head title="Gratitude Accounts" />
 
-        <div class="px-4 py-6  mx-auto space-y-8 sm:px-6">
+        <div class="px-4 py-6 space-y-8 sm:px-6">
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-3xl font-bold tracking-tight text-foreground">Gratitude Accounts</h1>

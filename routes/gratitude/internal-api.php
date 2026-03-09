@@ -8,7 +8,7 @@ use App\Http\Controllers\InternalApi\Gratitude\GratitudeController;
 
 Route::name('gratitude.')->prefix('gratitude/')
     ->group(function () {
-        Route::get('import', [GratitudeController::class, 'import'])->name('import');
+        Route::get('migrate-data', [GratitudeController::class, 'import'])->name('import');
         Route::get('/', [GratitudeController::class, 'apiIndex'])->name('index');
         Route::get('overview', [GratitudeController::class, 'apiOverview'])->name('overview');
         Route::get('reserve', [GratitudeController::class, 'apiReserve'])->name('reserve');
