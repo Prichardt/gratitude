@@ -6,6 +6,20 @@ import { ref, onMounted } from 'vue';
 import axios from 'axios';
 import AddLevel from '@/components/Gratitude/AddLevel.vue';
 import UpdateLevel from '@/components/Gratitude/UpdateLevel.vue';
+import { Button } from '@/components/ui/button';
+import { Trash2 } from 'lucide-vue-next';
+
+// ...
+const deleteLevel = async (id: number) => {
+    if (confirm('Are you sure you want to delete this level?')) {
+        try {
+            await axios.delete(`/internal-api/gratitude/levels/${id}`);
+            fetchLevels();
+        } catch (error) {
+            console.error("Failed to delete level", error);
+        }
+    }
+};
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Gratitude Program', href: '/gratitude' },
@@ -64,7 +78,12 @@ onMounted(() => {
                                 <span v-else class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">Inactive</span>
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                                <UpdateLevel :level="level" @saved="fetchLevels" />
+                                <div class="flex items-center justify-end space-x-2">
+                                    <UpdateLevel :level="level" @saved="fetchLevels" />
+                                    <Button variant="ghost" size="icon" @click="deleteLevel(level.id)" class="text-destructive h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
+                                        <Trash2 class="w-4 h-4" />
+                                    </Button>
+                                </div>
                             </td>
                         </tr>
                         <tr v-if="levels.length === 0">

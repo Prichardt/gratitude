@@ -21,13 +21,21 @@ class GratitudeLevel extends Model
         'min_points',
         'max_points',
         'status',
+        'redeemation_points_per_dollar',
         'stay_active_rules',
+        'level_rules',
+        'level_image',
+        'level_icon',
+    ];
+
+    protected $casts = [
+        'level_rules' => 'array',
     ];
 
     public function benefits()
     {
         return $this->belongsToMany(GratitudeBenefit::class)
-                    ->withPivot('description', 'value', 'value_type', 'calculation', 'is_active')
-                    ->withTimestamps();
+            ->withPivot('description', 'value', 'value_type', 'calculation', 'is_active')
+            ->withTimestamps();
     }
 }

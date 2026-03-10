@@ -209,7 +209,7 @@ class GratitudeController extends Controller
         }
     }
 
-    public function apiIndex(Request $request)
+    public function apiIndex()
     {
         // Admin view returning all gratitudes and benefits
         $gratitudes = Gratitude::with('user')->get()->map(function ($g) {
@@ -244,7 +244,7 @@ class GratitudeController extends Controller
         ]);
     }
 
-    public function apiOverview(Request $request)
+    public function apiOverview()
     {
         $totalAccounts = Gratitude::count();
         $totalUsable = Gratitude::sum('useablePoints');
@@ -262,7 +262,7 @@ class GratitudeController extends Controller
         ]);
     }
 
-    public function apiReserve(Request $request)
+    public function apiReserve()
     {
         $reserves = GratitudeReserve::orderBy('created_at', 'desc')->get();
         return response()->json([
@@ -346,7 +346,13 @@ class GratitudeController extends Controller
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
 
-        $request->validate(['date' => 'required', 'category' => 'required', 'points' => 'required|numeric']);
+        $request->validate([
+            'date' => 'required',
+            'category' => 'required',
+            'points' => 'required|numeric',
+            'amount' => 'required|numeric',
+            'description' => 'required',
+        ]);
 
         $point = EarnedPoint::create([
             'user_id' => $gratitude->user_id,
@@ -354,6 +360,8 @@ class GratitudeController extends Controller
             'date' => $request->date,
             'category' => $request->category,
             'points' => $request->points,
+            'amount' => $request->amount,
+            'description' => $request->description,
             'status' => 'approved',
         ]);
 
@@ -367,7 +375,13 @@ class GratitudeController extends Controller
     {
         $point = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
 
-        $request->validate(['date' => 'required', 'category' => 'required', 'points' => 'required|numeric']);
+        $request->validate([
+            'date' => 'required',
+            'category' => 'required',
+            'points' => 'required|numeric',
+            'amount' => 'required|numeric',
+            'description' => 'required',
+        ]);
 
         // Adjust gratitude totals
         $diff = $request->points - $point->points;
@@ -375,7 +389,7 @@ class GratitudeController extends Controller
         $gratitude->increment('useablePoints', $diff);
         $gratitude->increment('totalPoints', $diff);
 
-        $point->update($request->only('date', 'category', 'points'));
+        $point->update($request->only('date', 'category', 'points', 'amount', 'description'));
 
         return response()->json(['message' => 'Points updated', 'point' => $point]);
     }
@@ -384,7 +398,11 @@ class GratitudeController extends Controller
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
 
-        $request->validate(['date' => 'required', 'description' => 'required', 'points' => 'required|numeric']);
+        $request->validate([
+            'date' => 'required',
+            'description' => 'required',
+            'points' => 'required|numeric',
+        ]);
 
         $point = BonusPoint::create([
             'user_id' => $gratitude->user_id,

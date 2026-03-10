@@ -19,6 +19,10 @@ return new class extends Migration
             $table->boolean('status')->default(true);
             $table->string('redeemation_points_per_dollar')->default(0);
             $table->text('stay_active_rules')->nullable();
+            $table->json('level_rules')->nullable();
+            $table->string('level_image')->nullable();
+            $table->string('level_icon')->nullable();
+            $table->softDeletes();
             $table->timestamps();
         });
     }

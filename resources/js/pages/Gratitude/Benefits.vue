@@ -1,25 +1,38 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { BreadcrumbItem } from '@/types';
+import type { BreadcrumbItem } from '@/types';
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
-import AddBenefits from '@/components/Gratitude/AddBenefits.vue';
-import UpdateBenefits from '@/components/Gratitude/UpdateBenefits.vue';
+import AddBenefit from '@/components/Gratitude/AddBenefit.vue';
+import UpdateBenefit from '@/components/Gratitude/UpdateBenefit.vue';
+import { Button } from '@/components/ui/button';
+import { Trash2 } from 'lucide-vue-next';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Gratitude Program', href: '/gratitude' },
-    { title: 'Benefits', href: '/gratitude/benefits' },
+    { title: 'Base Benefits', href: '/gratitude/benefits' },
 ];
 
-const gridData = ref<any>({ levels: [], grid: [] });
+const benefits = ref<any[]>([]);
 
 const fetchBenefits = async () => {
     try {
         const response = await axios.get('/internal-api/gratitude/benefits');
-        gridData.value = response.data;
+        benefits.value = response.data;
     } catch (error) {
         console.error("Failed to load gratitude benefits", error);
+    }
+};
+
+const deleteBenefit = async (id: number) => {
+    if (confirm('Are you sure you want to delete this benefit?')) {
+        try {
+            await axios.delete(`/internal-api/gratitude/benefits/${id}`);
+            fetchBenefits();
+        } catch (error) {
+            console.error("Failed to delete benefit", error);
+        }
     }
 };
 
@@ -30,48 +43,51 @@ onMounted(() => {
 
 <template>
     <AppLayout :breadcrumbs="breadcrumbs">
-        <Head title="Gratitude Benefits" />
+        <Head title="Base Benefits" />
 
         <div class="px-4 py-6 sm:px-6 lg:px-8">
             <div class="sm:flex sm:items-center mb-8">
                 <div class="sm:flex-auto">
-                    <h1 class="text-3xl font-bold tracking-tight text-foreground">Gratitude Benefits</h1>
-                    <p class="mt-2 text-sm text-muted-foreground">Manage the benefits associated with each tier of the program.</p>
+                    <h1 class="text-3xl font-bold tracking-tight text-foreground">Base Benefits Pool</h1>
+                    <p class="mt-2 text-sm text-muted-foreground">Manage the master list of benefits available in the program.</p>
                 </div>
                 <div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
-                    <AddBenefits @saved="fetchBenefits" :levels="gridData.levels" />
+                    <AddBenefit @saved="fetchBenefits" />
                 </div>
             </div>
 
-            <div class="overflow-x-auto rounded-lg border border-border bg-card">
+            <div class="overflow-hidden rounded-lg border border-border bg-card">
                 <table class="min-w-full divide-y divide-border">
                     <thead class="bg-muted/50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Benefit</th>
-                            <th v-for="level in gridData.levels" :key="level.id" class="px-6 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                {{ level.name }}
-                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Benefit Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-border bg-card">
-                        <tr v-for="row in gridData.grid" :key="row.id">
-                            <td class="whitespace-nowrap px-6 py-4 font-medium text-foreground">
-                                {{ row.name }}
-                                <div class="text-xs text-muted-foreground truncate max-w-xs" v-if="row.description">{{ row.description }}</div>
+                        <tr v-for="benefit in benefits" :key="benefit.id">
+                            <td class="px-6 py-4">
+                                <div class="font-medium text-foreground">{{ benefit.name }}</div>
+                                <div class="text-xs text-muted-foreground truncate max-w-xs" v-if="benefit.description">{{ benefit.description }}</div>
                             </td>
-                            <td v-for="level in gridData.levels" :key="level.id" class="whitespace-nowrap px-6 py-4 text-center text-muted-foreground">
-                                <span v-if="row.levels[level.id]?.has_benefit">
-                                    {{ row.levels[level.id].value || '✓' }}
-                                </span>
-                                <span v-else class="text-muted-foreground/30">-</span>
+                            <td class="whitespace-nowrap px-6 py-4 text-muted-foreground capitalize">{{ benefit.type }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">
+                                <span v-if="benefit.is_active" class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">Active</span>
+                                <span v-else class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">Inactive</span>
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                                <UpdateBenefits :benefit="row" :levels="gridData.levels" @saved="fetchBenefits" />
+                                <div class="flex items-center justify-end space-x-2">
+                                    <UpdateBenefit :benefit="benefit" @saved="fetchBenefits" />
+                                    <Button variant="ghost" size="icon" @click="deleteBenefit(benefit.id)" class="text-destructive h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
+                                        <Trash2 class="w-4 h-4" />
+                                    </Button>
+                                </div>
                             </td>
                         </tr>
-                        <tr v-if="gridData.grid.length === 0">
-                            <td :colspan="gridData.levels.length + 2" class="px-6 py-4 text-center text-muted-foreground">No benefits established yet.</td>
+                        <tr v-if="benefits.length === 0">
+                            <td colspan="4" class="px-6 py-4 text-center text-muted-foreground">No base benefits established yet.</td>
                         </tr>
                     </tbody>
                 </table>
