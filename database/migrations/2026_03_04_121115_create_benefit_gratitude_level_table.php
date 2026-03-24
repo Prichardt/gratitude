@@ -20,6 +20,7 @@ return new class extends Migration
             $table->string('value_type')->nullable(); // percentage or fixed amount   
             $table->json('calculation')->nullable(); // calculation rules for the benefit   
             $table->boolean('is_active')->default(true);
+            $table->boolean('web_status')->default(true);
             $table->softDeletes();
             $table->timestamps();
         });

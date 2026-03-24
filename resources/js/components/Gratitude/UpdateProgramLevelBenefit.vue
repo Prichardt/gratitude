@@ -24,7 +24,8 @@ const openModal = () => {
             enabled: pivot?.has_benefit || false,
             value: pivot?.value || '',
             description: pivot?.description || '',
-            value_type: pivot?.value_type || 'fixed'
+            value_type: pivot?.value_type || 'fixed',
+            web_status: pivot?.web_status ?? true
         };
     });
     isOpen.value = true;
@@ -58,14 +59,18 @@ const submit = async () => {
                                     <Label :for="'edit_level_'+level.id" class="font-bold">{{ level.name }}</Label>
                                 </div>
                             </div>
-                            <div v-if="form.level_mappings[level.id].enabled" class="grid grid-cols-2 gap-2 mt-2">
-                                <div>
+                            <div v-if="form.level_mappings[level.id].enabled" class="mt-2 grid grid-cols-12 gap-2">
+                                <div class="col-span-4">
                                     <Label class="text-xs text-muted-foreground">Value</Label>
                                     <Input v-model="form.level_mappings[level.id].value" placeholder="e.g. 5,000 pts" size="sm" />
                                 </div>
-                                <div>
+                                <div class="col-span-5">
                                     <Label class="text-xs text-muted-foreground">Details/Description</Label>
                                     <Input v-model="form.level_mappings[level.id].description" size="sm" />
+                                </div>
+                                <div class="col-span-3 flex items-center pt-5 pl-2 space-x-2">
+                                    <input type="checkbox" v-model="form.level_mappings[level.id].web_status" :id="'web_status_'+level.id" class="rounded border-input text-primary h-4 w-4" />
+                                    <Label :for="'web_status_'+level.id" class="text-xs">Web Status</Label>
                                 </div>
                             </div>
                         </div>

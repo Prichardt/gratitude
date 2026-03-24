@@ -4,7 +4,11 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
+import { Button } from '@/components/ui/button';
+import { Trash2 } from 'lucide-vue-next';
 import UpdateProgramLevelBenefit from '@/components/Gratitude/UpdateProgramLevelBenefit.vue';
+import AddProgramLevelBenefit from '@/components/Gratitude/AddProgramLevelBenefit.vue';
+import ViewProgramLevelBenefit from '@/components/Gratitude/ViewProgramLevelBenefit.vue';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Gratitude Program', href: '/gratitude' },
@@ -25,6 +29,17 @@ const fetchProgramBenefits = async () => {
     }
 };
 
+const deleteBenefit = async (id: number) => {
+    if (confirm('Are you sure you want to delete this benefit? This will remove all its level assignments.')) {
+        try {
+            await axios.delete(`/internal-api/gratitude/benefits/${id}`);
+            fetchProgramBenefits();
+        } catch (error) {
+            console.error("Failed to delete program level benefit", error);
+        }
+    }
+};
+
 onMounted(() => {
     fetchProgramBenefits();
 });
@@ -39,6 +54,9 @@ onMounted(() => {
                 <div class="sm:flex-auto">
                     <h1 class="text-3xl font-bold tracking-tight text-foreground">Program Level Benefits</h1>
                     <p class="mt-2 text-sm text-muted-foreground">Manage which benefits are assigned to each tier level and specify tier-specific values.</p>
+                </div>
+                <div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
+                    <AddProgramLevelBenefit @saved="fetchProgramBenefits" />
                 </div>
             </div>
 
@@ -73,7 +91,13 @@ onMounted(() => {
                                 <span v-else class="text-muted-foreground/30 text-sm">-</span>
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                                <UpdateProgramLevelBenefit :benefit="row" :levels="gridData.levels" @saved="fetchProgramBenefits" />
+                                <div class="flex items-center justify-end space-x-2">
+                                    <ViewProgramLevelBenefit :benefit="row" :levels="gridData.levels" />
+                                    <UpdateProgramLevelBenefit :benefit="row" :levels="gridData.levels" @saved="fetchProgramBenefits" />
+                                    <Button variant="ghost" size="icon" @click="deleteBenefit(row.id)" class="text-destructive h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
+                                        <Trash2 class="w-4 h-4" />
+                                    </Button>
+                                </div>
                             </td>
                         </tr>
                         <tr v-if="gridData.grid.length === 0">

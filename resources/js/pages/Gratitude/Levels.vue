@@ -6,6 +6,7 @@ import { ref, onMounted } from 'vue';
 import axios from 'axios';
 import AddLevel from '@/components/Gratitude/AddLevel.vue';
 import UpdateLevel from '@/components/Gratitude/UpdateLevel.vue';
+import ViewLevel from '@/components/Gratitude/ViewLevel.vue';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-vue-next';
 
@@ -79,6 +80,7 @@ onMounted(() => {
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                                 <div class="flex items-center justify-end space-x-2">
+                                    <ViewLevel :level="level" />
                                     <UpdateLevel :level="level" @saved="fetchLevels" />
                                     <Button variant="ghost" size="icon" @click="deleteLevel(level.id)" class="text-destructive h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
                                         <Trash2 class="w-4 h-4" />

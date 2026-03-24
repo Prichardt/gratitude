@@ -52,6 +52,9 @@ onMounted(() => {
                     <p class="mt-2 text-sm text-muted-foreground">Manage the master list of benefits available in the program.</p>
                 </div>
                 <div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
+                    <Button @click="importBenefits">Import</Button>
+                </div>
+                <div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
                     <AddBenefit @saved="fetchBenefits" />
                 </div>
             </div>

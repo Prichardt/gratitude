@@ -40,15 +40,15 @@ class GratitudeController extends Controller
                     ['old_id' => $record['id']],
                     [
                         'gratitudeNumber' => $record['gratitudeNumber'] ?? null,
-                        'totalPoints'     => $record['totalPoints'] ?? 0,
-                        'useablePoints'   => $record['useablePoints'] ?? 0,
-                        'level'           => $record['level'] ?? 'Explorer',
-                        'status'          => $record['status'] ?? null,
-                        'statusChange'    => $record['statusChange'] ?? null,
-                        'importStatus'    => $record['importStatus'] ?? 1,
-                        'expires_at'      => isset($record['expires_at']) ? Carbon::parse($record['expires_at']) : null,
-                        'created_at'      => isset($record['created_at']) ? Carbon::parse($record['created_at']) : null,
-                        'updated_at'      => isset($record['updated_at']) ? Carbon::parse($record['updated_at']) : null,
+                        'totalPoints' => $record['totalPoints'] ?? 0,
+                        'useablePoints' => $record['useablePoints'] ?? 0,
+                        'level' => $record['level'] ?? 'Explorer',
+                        'status' => $record['status'] ?? null,
+                        'statusChange' => $record['statusChange'] ?? null,
+                        'importStatus' => $record['importStatus'] ?? 1,
+                        'expires_at' => isset($record['expires_at']) ? Carbon::parse($record['expires_at']) : null,
+                        'created_at' => isset($record['created_at']) ? Carbon::parse($record['created_at']) : null,
+                        'updated_at' => isset($record['updated_at']) ? Carbon::parse($record['updated_at']) : null,
                     ]
                 );
 
@@ -59,18 +59,18 @@ class GratitudeController extends Controller
                         Cancellation::updateOrCreate(
                             ['old_id' => $cp['id']],
                             [
-                                'user_id'         => $cp['user_id'] ?? null,
-                                'points'          => $cp['points'] ?? 0,
-                                'reason'          => $cp['reason'] ?? null,
-                                'amount'          => $cp['amount'] ?? 0,
-                                'category'        => $cp['category'] ?? null,
-                                'description'     => $cp['description'] ?? null,
-                                'date'            => isset($cp['date']) ? Carbon::parse($cp['date']) : null,
+                                'user_id' => $cp['user_id'] ?? null,
+                                'points' => $cp['points'] ?? 0,
+                                'reason' => $cp['reason'] ?? null,
+                                'amount' => $cp['amount'] ?? 0,
+                                'category' => $cp['category'] ?? null,
+                                'description' => $cp['description'] ?? null,
+                                'date' => isset($cp['date']) ? Carbon::parse($cp['date']) : null,
                                 'gratitudeNumber' => $cp['gratitudeNumber'] ?? null,
                                 'points_breakdown' => $cp['points_breakdown'] ?? null,
-                                'status'          => $cp['status'] ?? null,
-                                'created_at'      => isset($cp['created_at']) ? Carbon::parse($cp['created_at']) : null,
-                                'updated_at'      => isset($cp['updated_at']) ? Carbon::parse($cp['updated_at']) : null,
+                                'status' => $cp['status'] ?? null,
+                                'created_at' => isset($cp['created_at']) ? Carbon::parse($cp['created_at']) : null,
+                                'updated_at' => isset($cp['updated_at']) ? Carbon::parse($cp['updated_at']) : null,
                             ]
                         );
                     }
@@ -81,7 +81,7 @@ class GratitudeController extends Controller
                     foreach ($record['earnedPoints'] as $ep) {
 
                         $cancel_id = null;
-                        $cancel_old_id =    $ep['cancel_id'] ?? null;
+                        $cancel_old_id = $ep['cancel_id'] ?? null;
                         if ($cancel_old_id) {
                             $cancel = Cancellation::where('old_id', $cancel_old_id)->first();
                             if ($cancel) {
@@ -92,21 +92,21 @@ class GratitudeController extends Controller
                         EarnedPoint::updateOrCreate(
                             ['old_id' => $ep['id']],
                             [
-                                'user_id'            => $ep['user_id'] ?? null,
-                                'journey_id'         => $ep['journey_id'] ?? null,
-                                'cancel_id'          => $cancel_id,
-                                'gratitudeNumber'    => $ep['gratitudeNumber'] ?? null,
-                                'points'             => $ep['points'] ?? 0,
-                                'redeemed_points'    => $ep['redeemed_points'] ?? 0,
+                                'user_id' => $ep['user_id'] ?? null,
+                                'journey_id' => $ep['journey_id'] ?? null,
+                                'cancel_id' => $cancel_id,
+                                'gratitudeNumber' => $ep['gratitudeNumber'] ?? null,
+                                'points' => $ep['points'] ?? 0,
+                                'redeemed_points' => $ep['redeemed_points'] ?? 0,
                                 'redemption_history' => $ep['redemption_history'] ?? null,
-                                'amount'             => $ep['amount'] ?? null,
-                                'date'               => isset($ep['date']) ? Carbon::parse($ep['date']) : null,
-                                'description'        => $ep['description'] ?? null,
-                                'category'           => $ep['category'] ?? null,
-                                'status'             => $ep['status'] ?? null,
-                                'expires_at'         => isset($ep['expires_at']) ? Carbon::parse($ep['expires_at']) : null,
-                                'created_at'         => isset($ep['created_at']) ? Carbon::parse($ep['created_at']) : null,
-                                'updated_at'         => isset($ep['updated_at']) ? Carbon::parse($ep['updated_at']) : null,
+                                'amount' => $ep['amount'] ?? null,
+                                'date' => isset($ep['date']) ? Carbon::parse($ep['date']) : null,
+                                'description' => $ep['description'] ?? null,
+                                'category' => $ep['category'] ?? null,
+                                'status' => $ep['status'] ?? null,
+                                'expires_at' => isset($ep['expires_at']) ? Carbon::parse($ep['expires_at']) : null,
+                                'created_at' => isset($ep['created_at']) ? Carbon::parse($ep['created_at']) : null,
+                                'updated_at' => isset($ep['updated_at']) ? Carbon::parse($ep['updated_at']) : null,
                             ]
                         );
                     }
@@ -117,7 +117,7 @@ class GratitudeController extends Controller
                     foreach ($record['bonusPoints'] as $bp) {
 
                         $cancel_id = null;
-                        $cancel_old_id =    $bp['cancel_id'] ?? null;
+                        $cancel_old_id = $bp['cancel_id'] ?? null;
                         if ($cancel_old_id) {
                             $cancel = Cancellation::where('old_id', $cancel_old_id)->first();
                             if ($cancel) {
@@ -128,22 +128,22 @@ class GratitudeController extends Controller
                         BonusPoint::updateOrCreate(
                             ['old_id' => $bp['id']],
                             [
-                                'user_id'            => $bp['user_id'] ?? null,
-                                'journey_id'         => $bp['journey_id'] ?? null,
-                                'cancel_id'          => $cancel_id ?? null,
-                                'gratitudeNumber'    => $bp['gratitudeNumber'] ?? null,
-                                'points'             => $bp['points'] ?? 0,
-                                'redeemed_points'    => $bp['redeemed_points'] ?? 0,
+                                'user_id' => $bp['user_id'] ?? null,
+                                'journey_id' => $bp['journey_id'] ?? null,
+                                'cancel_id' => $cancel_id ?? null,
+                                'gratitudeNumber' => $bp['gratitudeNumber'] ?? null,
+                                'points' => $bp['points'] ?? 0,
+                                'redeemed_points' => $bp['redeemed_points'] ?? 0,
                                 'redemption_history' => $bp['redemption_history'] ?? null,
-                                'amount'             => $bp['amount'] ?? null,
-                                'date'               => isset($bp['date']) ? Carbon::parse($bp['date']) : null,
-                                'description'        => $bp['description'] ?? null,
-                                'category'           => $bp['category'] ?? null,
-                                'type'               => $bp['type'] ?? null,
-                                'status'             => $bp['status'] ?? null,
-                                'expires_at'         => isset($bp['expires_at']) ? Carbon::parse($bp['expires_at']) : null,
-                                'created_at'         => isset($bp['created_at']) ? Carbon::parse($bp['created_at']) : null,
-                                'updated_at'         => isset($bp['updated_at']) ? Carbon::parse($bp['updated_at']) : null,
+                                'amount' => $bp['amount'] ?? null,
+                                'date' => isset($bp['date']) ? Carbon::parse($bp['date']) : null,
+                                'description' => $bp['description'] ?? null,
+                                'category' => $bp['category'] ?? null,
+                                'type' => $bp['type'] ?? null,
+                                'status' => $bp['status'] ?? null,
+                                'expires_at' => isset($bp['expires_at']) ? Carbon::parse($bp['expires_at']) : null,
+                                'created_at' => isset($bp['created_at']) ? Carbon::parse($bp['created_at']) : null,
+                                'updated_at' => isset($bp['updated_at']) ? Carbon::parse($bp['updated_at']) : null,
                             ]
                         );
                     }
@@ -154,7 +154,7 @@ class GratitudeController extends Controller
                     foreach ($record['redeemPoints'] as $rp) {
 
                         $cancel_id = null;
-                        $cancel_old_id =    $rp['cancel_id'] ?? null;
+                        $cancel_old_id = $rp['cancel_id'] ?? null;
                         if ($cancel_old_id) {
                             $cancel = Cancellation::where('old_id', $cancel_old_id)->first();
                             if ($cancel) {
@@ -165,17 +165,17 @@ class GratitudeController extends Controller
                         RedeemPoints::updateOrCreate(
                             ['old_id' => $rp['id']],
                             [
-                                'user_id'         => $rp['user_id'] ?? null,
-                                'journey_id'      => $rp['journey_id'] ?? null,
-                                'cancel_id'       => $cancel_id ?? null,
+                                'user_id' => $rp['user_id'] ?? null,
+                                'journey_id' => $rp['journey_id'] ?? null,
+                                'cancel_id' => $cancel_id ?? null,
                                 'gratitudeNumber' => $rp['gratitudeNumber'] ?? null,
-                                'points'          => $rp['points'] ?? 0,
-                                'amount'          => $rp['amount'] ?? 0,
-                                'roomStatus'      => $rp['roomStatus'] ?? null,
-                                'reason'          => $rp['description'] ?? 'Imported Redemption',
-                                'status'          => $rp['status'] ?? null,
-                                'created_at'      => isset($rp['created_at']) ? Carbon::parse($rp['created_at']) : null,
-                                'updated_at'      => isset($rp['updated_at']) ? Carbon::parse($rp['updated_at']) : null,
+                                'points' => $rp['points'] ?? 0,
+                                'amount' => $rp['amount'] ?? 0,
+                                'roomStatus' => $rp['roomStatus'] ?? null,
+                                'reason' => $rp['description'] ?? 'Imported Redemption',
+                                'status' => $rp['status'] ?? null,
+                                'created_at' => isset($rp['created_at']) ? Carbon::parse($rp['created_at']) : null,
+                                'updated_at' => isset($rp['updated_at']) ? Carbon::parse($rp['updated_at']) : null,
                             ]
                         );
                     }

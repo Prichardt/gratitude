@@ -94,7 +94,7 @@ const getStatusBadge = (status: string) => {
             </div>
 
             <!-- Gratitudes Table -->
-            <div class="bg-card rounded-xl border border-border shadow-sm ">
+            <div class="bg-card rounded-xl border border-border shadow-sm p-3">
                 <DataTable
                     title="Gratitude Accounts"
                     :columns="columns"
