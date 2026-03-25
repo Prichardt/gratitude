@@ -2,13 +2,14 @@
 import { Head } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-vue-next';
 import UpdateProgramLevelBenefit from '@/components/Gratitude/UpdateProgramLevelBenefit.vue';
 import AddProgramLevelBenefit from '@/components/Gratitude/AddProgramLevelBenefit.vue';
 import ViewProgramLevelBenefit from '@/components/Gratitude/ViewProgramLevelBenefit.vue';
+import DataTable from '@/components/DataTable.vue';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Gratitude Program', href: '/gratitude' },
@@ -40,6 +41,22 @@ const deleteBenefit = async (id: number) => {
     }
 };
 
+const tableColumns = computed(() => {
+    const cols: any[] = [
+        { key: 'benefit', label: 'Base Benefit', sortable: true },
+    ];
+    gridData.value.levels.forEach((level: any) => {
+        cols.push({
+            key: `level_${level.id}`,
+            label: level.name,
+            align: 'center',
+            sortable: false,
+        });
+    });
+    cols.push({ key: 'actions', label: 'Actions', align: 'right', exportable: false, sortable: false });
+    return cols;
+});
+
 onMounted(() => {
     fetchProgramBenefits();
 });
@@ -56,60 +73,54 @@ onMounted(() => {
                     <p class="mt-2 text-sm text-muted-foreground">Manage which benefits are assigned to each tier level and specify tier-specific values.</p>
                 </div>
                 <div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
-                    <AddProgramLevelBenefit @saved="fetchProgramBenefits" />
+                    <AddProgramLevelBenefit :levels="gridData.levels" :benefits="gridData.grid" @saved="fetchProgramBenefits" />
                 </div>
             </div>
 
-            <div class="overflow-x-auto rounded-lg border border-border bg-card">
-                <table class="min-w-full divide-y divide-border">
-                    <thead class="bg-muted/50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Base Benefit</th>
-                            <th v-for="level in gridData.levels" :key="level.id" class="px-6 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider bg-muted/80 border-l border-border/50">
-                                {{ level.name }}
-                            </th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-border bg-card" v-if="!loading">
-                        <tr v-for="row in gridData.grid" :key="row.id" class="hover:bg-muted/10 transition-colors">
-                            <td class="whitespace-nowrap px-6 py-4 font-medium text-foreground">
-                                {{ row.name }}
-                                <div class="text-xs text-muted-foreground truncate max-w-xs" v-if="row.description">{{ row.description }}</div>
-                            </td>
-                            <td v-for="level in gridData.levels" :key="level.id" class="whitespace-nowrap px-6 py-4 text-center border-l border-border/50">
-                                <template v-if="row.levels[level.id]?.has_benefit">
-                                    <div class="flex flex-col items-center justify-center">
-                                        <span class="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                                            {{ row.levels[level.id].value || 'Enabled' }}
-                                        </span>
-                                        <span class="text-[10px] text-muted-foreground mt-1" v-if="row.levels[level.id].description">
-                                            {{ row.levels[level.id].description }}
-                                        </span>
-                                    </div>
-                                </template>
-                                <span v-else class="text-muted-foreground/30 text-sm">-</span>
-                            </td>
-                            <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                                <div class="flex items-center justify-end space-x-2">
-                                    <ViewProgramLevelBenefit :benefit="row" :levels="gridData.levels" />
-                                    <UpdateProgramLevelBenefit :benefit="row" :levels="gridData.levels" @saved="fetchProgramBenefits" />
-                                    <Button variant="ghost" size="icon" @click="deleteBenefit(row.id)" class="text-destructive h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
-                                        <Trash2 class="w-4 h-4" />
-                                    </Button>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr v-if="gridData.grid.length === 0">
-                            <td :colspan="gridData.levels.length + 2" class="px-6 py-4 text-center text-muted-foreground">No benefits established yet. Create Base Benefits first.</td>
-                        </tr>
-                    </tbody>
-                    <tbody v-else>
-                        <tr>
-                            <td colspan="100%" class="px-6 py-8 text-center text-muted-foreground">Loading...</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="bg-card w-full rounded-lg shadow-sm border border-border p-4">
+                <DataTable
+                    :columns="tableColumns"
+                    :rows="gridData.grid"
+                    :busy="loading"
+                    title="Program Level Benefits"
+                    class="w-full"
+                >
+                    <!-- Custom rendering for Benefit info -->
+                    <template #cell-benefit="{ row }">
+                        <div class="font-medium text-foreground">{{ (row as any).name }}</div>
+                        <div class="text-xs text-muted-foreground truncate max-w-xs" v-if="(row as any).description">{{ (row as any).description }}</div>
+                    </template>
+
+                    <!-- Dynamic slots for each level mapped to its pivot data -->
+                    <template v-for="level in gridData.levels" :key="'col_'+level.id" #[`cell-level_${level.id}`]="{ row }">
+                        <template v-if="(row as any).levels[level.id]?.has_benefit">
+                            <div class="flex flex-col items-center justify-center">
+                                <span class="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                                    {{ (row as any).levels[level.id].value || 'Enabled' }}
+                                </span>
+                                <span class="text-[10px] text-muted-foreground mt-1" v-if="(row as any).levels[level.id].description">
+                                    {{ (row as any).levels[level.id].description }}
+                                </span>
+                            </div>
+                        </template>
+                        <span v-else class="text-muted-foreground/30 text-sm">-</span>
+                    </template>
+
+                    <!-- Row actions -->
+                    <template #cell-actions="{ row }">
+                        <div class="flex items-center justify-end space-x-2">
+                            <ViewProgramLevelBenefit :benefit="(row as any)" :levels="gridData.levels" />
+                            <UpdateProgramLevelBenefit :benefit="(row as any)" :levels="gridData.levels" @saved="fetchProgramBenefits" />
+                            <Button variant="ghost" size="icon" @click="deleteBenefit((row as any).id)" class="text-destructive h-8 w-8 hover:bg-destructive/10 hover:text-destructive">
+                                <Trash2 class="w-4 h-4" />
+                            </Button>
+                        </div>
+                    </template>
+                    
+                    <template #empty>
+                        No benefits established yet. Create a Base Benefit first.
+                    </template>
+                </DataTable>
             </div>
         </div>
     </AppLayout>

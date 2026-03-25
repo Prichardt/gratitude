@@ -34,7 +34,7 @@ class GratitudeLevel extends Model
 
     public function benefits()
     {
-        return $this->belongsToMany(GratitudeBenefit::class)
+        return $this->belongsToMany(GratitudeBenefit::class, 'benefit_gratitude_level')
             ->using(BenefitGratitudeLevel::class)
             ->withPivot('description', 'value', 'value_type', 'calculation', 'is_active', 'web_status')
             ->withTimestamps();

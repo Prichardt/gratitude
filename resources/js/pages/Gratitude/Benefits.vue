@@ -25,6 +25,15 @@ const fetchBenefits = async () => {
     }
 };
 
+const importBenefits = async () => {
+    try {
+        const response = await axios.get('/internal-api/gratitude/migrate-benefits/data');
+        fetchBenefits();
+    } catch (error) {
+        console.error("Failed to import benefits", error);
+    }
+}
+
 const deleteBenefit = async (id: number) => {
     if (confirm('Are you sure you want to delete this benefit?')) {
         try {

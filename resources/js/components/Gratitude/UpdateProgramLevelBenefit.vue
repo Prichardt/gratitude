@@ -25,11 +25,21 @@ const openModal = () => {
             value: pivot?.value || '',
             description: pivot?.description || '',
             value_type: pivot?.value_type || 'fixed',
+            is_active: pivot?.is_active ?? true,
             web_status: pivot?.web_status ?? true
         };
     });
     isOpen.value = true;
 };
+
+// Ensure web_status is strictly false if system status (is_active) goes false
+watch(() => form.value.level_mappings, (newVal) => {
+    Object.keys(newVal).forEach(key => {
+        if (newVal[key as any].is_active === false) {
+            newVal[key as any].web_status = false;
+        }
+    });
+}, { deep: true });
 
 const submit = async () => {
     try {
@@ -47,7 +57,7 @@ const submit = async () => {
         <Button @click="openModal" variant="outline" size="sm">Edit Levels</Button>
 
         <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 text-left">
-            <div class="bg-card w-full max-w-2xl p-6 rounded-lg shadow-lg border border-border max-h-[90vh] overflow-y-auto">
+            <div class="bg-card w-full max-w-3xl p-6 rounded-lg shadow-lg border border-border max-h-[90vh] overflow-y-auto">
                 <h2 class="text-xl font-bold mb-1">Assign "{{ benefit.name }}" to Levels</h2>
                 <p class="text-sm text-muted-foreground mb-4">Select which tier levels receive this benefit and specify their exact values.</p>
                 <form @submit.prevent="submit" class="space-y-4">
@@ -59,18 +69,22 @@ const submit = async () => {
                                     <Label :for="'edit_level_'+level.id" class="font-bold">{{ level.name }}</Label>
                                 </div>
                             </div>
-                            <div v-if="form.level_mappings[level.id].enabled" class="mt-2 grid grid-cols-12 gap-2">
+                            <div v-if="form.level_mappings[level.id].enabled" class="mt-2 grid grid-cols-12 gap-3">
                                 <div class="col-span-4">
                                     <Label class="text-xs text-muted-foreground">Value</Label>
                                     <Input v-model="form.level_mappings[level.id].value" placeholder="e.g. 5,000 pts" size="sm" />
                                 </div>
-                                <div class="col-span-5">
+                                <div class="col-span-4">
                                     <Label class="text-xs text-muted-foreground">Details/Description</Label>
                                     <Input v-model="form.level_mappings[level.id].description" size="sm" />
                                 </div>
-                                <div class="col-span-3 flex items-center pt-5 pl-2 space-x-2">
-                                    <input type="checkbox" v-model="form.level_mappings[level.id].web_status" :id="'web_status_'+level.id" class="rounded border-input text-primary h-4 w-4" />
-                                    <Label :for="'web_status_'+level.id" class="text-xs">Web Status</Label>
+                                <div class="col-span-2 flex items-center pt-5 pl-2 space-x-2">
+                                    <input type="checkbox" v-model="form.level_mappings[level.id].is_active" :id="'is_active_'+level.id" class="rounded border-input text-primary h-4 w-4" />
+                                    <Label :for="'is_active_'+level.id" class="text-xs">System Status</Label>
+                                </div>
+                                <div class="col-span-2 flex items-center pt-5 space-x-2">
+                                    <input type="checkbox" v-model="form.level_mappings[level.id].web_status" :disabled="!form.level_mappings[level.id].is_active" :id="'web_status_'+level.id" class="rounded border-input text-primary h-4 w-4 disabled:opacity-50" />
+                                    <Label :for="'web_status_'+level.id" class="text-xs" :class="{'text-muted-foreground': !form.level_mappings[level.id].is_active}">Web Status</Label>
                                 </div>
                             </div>
                         </div>

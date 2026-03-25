@@ -39,17 +39,21 @@ const openModal = () => {
                             <span v-else class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Disabled</span>
                         </div>
                         <div v-if="benefit.levels[level.id]?.has_benefit" class="grid grid-cols-12 gap-2 mt-2">
-                            <div class="col-span-4">
+                            <div class="col-span-3">
                                 <span class="text-[10px] uppercase font-semibold text-muted-foreground block">Value</span>
                                 <span class="text-sm font-medium">{{ benefit.levels[level.id]?.value || '-' }}</span>
                             </div>
-                            <div class="col-span-5">
+                            <div class="col-span-4">
                                 <span class="text-[10px] uppercase font-semibold text-muted-foreground block">Details</span>
                                 <span class="text-sm">{{ benefit.levels[level.id]?.description || '-' }}</span>
                             </div>
+                            <div class="col-span-2">
+                                <span class="text-[10px] uppercase font-semibold text-muted-foreground block">System Status</span>
+                                <span class="text-sm font-medium" :class="benefit.levels[level.id]?.is_active ? 'text-green-600' : 'text-red-500'">{{ benefit.levels[level.id]?.is_active ? 'Active' : 'Inactive' }}</span>
+                            </div>
                             <div class="col-span-3">
                                 <span class="text-[10px] uppercase font-semibold text-muted-foreground block">Web Status</span>
-                                <span class="text-sm">{{ benefit.levels[level.id]?.web_status ? 'Active' : 'Inactive' }}</span>
+                                <span class="text-sm font-medium" :class="benefit.levels[level.id]?.web_status ? 'text-green-600' : 'text-red-500'">{{ benefit.levels[level.id]?.web_status ? 'Active' : 'Inactive' }}</span>
                             </div>
                         </div>
                     </div>

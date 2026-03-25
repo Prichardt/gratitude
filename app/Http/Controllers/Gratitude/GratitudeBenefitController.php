@@ -27,11 +27,43 @@ class GratitudeBenefitController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'type' => 'required|string|max:50',
+            'type' => 'nullable|string|max:50',
             'is_active' => 'boolean',
+            'level_mappings' => 'nullable|array',
+            'level_mappings.*.enabled' => 'boolean',
+            'level_mappings.*.value' => 'nullable|string',
+            'level_mappings.*.description' => 'nullable|string',
+            'level_mappings.*.value_type' => 'nullable|string',
+            'level_mappings.*.is_active' => 'boolean',
+            'level_mappings.*.web_status' => 'boolean',
         ]);
 
-        $benefit = GratitudeBenefit::create($validated);
+        $benefit = GratitudeBenefit::create([
+            'name' => $validated['name'],
+            'description' => $validated['description'] ?? null,
+            'type' => $validated['type'] ?? 'base',
+            'is_active' => $validated['is_active'] ?? true,
+        ]);
+
+        if (isset($validated['level_mappings'])) {
+            $syncData = [];
+            foreach ($validated['level_mappings'] as $levelId => $mapping) {
+                if (isset($mapping['enabled']) && $mapping['enabled']) {
+                    $isActive = $mapping['is_active'] ?? true;
+                    $webStatus = $isActive ? ($mapping['web_status'] ?? true) : false;
+
+                    $syncData[$levelId] = [
+                        'value' => $mapping['value'] ?? null,
+                        'description' => $mapping['description'] ?? null,
+                        'value_type' => $mapping['value_type'] ?? 'fixed',
+                        'calculation' => null,
+                        'is_active' => $isActive,
+                        'web_status' => $webStatus,
+                    ];
+                }
+            }
+            $benefit->levels()->sync($syncData);
+        }
 
         return response()->json(['message' => 'Benefit created successfully.', 'benefit' => $benefit], 201);
     }

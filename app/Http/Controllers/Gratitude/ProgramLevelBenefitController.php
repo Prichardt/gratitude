@@ -29,17 +29,24 @@ class ProgramLevelBenefitController extends Controller
             'level_mappings.*.value' => 'nullable|string',
             'level_mappings.*.description' => 'nullable|string',
             'level_mappings.*.value_type' => 'nullable|string',
+            'level_mappings.*.is_active' => 'boolean',
+            'level_mappings.*.web_status' => 'boolean',
         ]);
 
         $syncData = [];
         foreach ($validated['level_mappings'] as $levelId => $mapping) {
             if (isset($mapping['enabled']) && $mapping['enabled']) {
+                
+                $isActive = $mapping['is_active'] ?? true;
+                $webStatus = $isActive ? ($mapping['web_status'] ?? true) : false;
+
                 $syncData[$levelId] = [
                     'value' => $mapping['value'] ?? null,
                     'description' => $mapping['description'] ?? null,
                     'value_type' => $mapping['value_type'] ?? 'fixed',
                     'calculation' => null,
-                    'is_active' => true,
+                    'is_active' => $isActive,
+                    'web_status' => $webStatus,
                 ];
             }
         }

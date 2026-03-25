@@ -1,7 +1,8 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\InternalApi\Gratitude\GratitudeBenefitController;
 use App\Http\Controllers\InternalApi\Gratitude\GratitudeController;
+use Illuminate\Support\Facades\Route;
 
 // Gratitude APIs
 
@@ -35,4 +36,7 @@ Route::name('gratitude.')->prefix('gratitude/')
         // Program Level Benefits (Pivot)
         Route::get('program-benefits', [\App\Http\Controllers\Gratitude\ProgramLevelBenefitController::class, 'index'])->name('program-benefits.index');
         Route::put('program-benefits/{benefit}', [\App\Http\Controllers\Gratitude\ProgramLevelBenefitController::class, 'update'])->name('program-benefits.update');
+
+        // Import Benefits
+        Route::get('migrate-benefits/data', [GratitudeBenefitController::class, 'importBenefits'])->name('migrate-benefits.data');
     });

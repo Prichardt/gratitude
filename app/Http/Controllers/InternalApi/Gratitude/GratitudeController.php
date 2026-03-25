@@ -19,24 +19,26 @@ class GratitudeController extends Controller
 {
     public function import()
     {
-        $data = [];
-        $getResponse = Http::get('http://aivteam.test/api/gratitude/get-all/data');
-        if ($getResponse) {
-            $data = json_decode($getResponse->body(), true);
+        // Added withoutVerifying() to fix the cURL 60 SSL certificate error on local WAMP
+        $getResponse = Http::withoutVerifying()->timeout(600)->get('http://aivteam.local/api/get/graitude-data-all/open/gratitude');
+
+        if (!$getResponse->successful()) {
+            return response()->json(['message' => 'Failed to fetch data from remote API', 'status' => $getResponse->status()], 500);
         }
+
+        // Use Laravel's built in json parser
+        $data = $getResponse->json();
 
         if (empty($data) || !is_array($data)) {
             return response()->json(['message' => 'Invalid data format or empty payload'], 400);
         }
-
-        // dd($data);
 
         DB::beginTransaction();
 
         try {
             foreach ($data as $record) {
                 // Map Gratitude Model
-                $gratitude = Gratitude::updateOrCreate(
+                Gratitude::updateOrCreate(
                     ['old_id' => $record['id']],
                     [
                         'gratitudeNumber' => $record['gratitudeNumber'] ?? null,
@@ -46,9 +48,9 @@ class GratitudeController extends Controller
                         'status' => $record['status'] ?? null,
                         'statusChange' => $record['statusChange'] ?? null,
                         'importStatus' => $record['importStatus'] ?? 1,
-                        'expires_at' => isset($record['expires_at']) ? Carbon::parse($record['expires_at']) : null,
-                        'created_at' => isset($record['created_at']) ? Carbon::parse($record['created_at']) : null,
-                        'updated_at' => isset($record['updated_at']) ? Carbon::parse($record['updated_at']) : null,
+                        'expires_at' => !empty($record['expires_at']) ? Carbon::parse($record['expires_at']) : null,
+                        'created_at' => !empty($record['created_at']) ? Carbon::parse($record['created_at']) : null,
+                        'updated_at' => !empty($record['updated_at']) ? Carbon::parse($record['updated_at']) : null,
                     ]
                 );
 
@@ -65,12 +67,12 @@ class GratitudeController extends Controller
                                 'amount' => $cp['amount'] ?? 0,
                                 'category' => $cp['category'] ?? null,
                                 'description' => $cp['description'] ?? null,
-                                'date' => isset($cp['date']) ? Carbon::parse($cp['date']) : null,
+                                'date' => !empty($cp['date']) ? Carbon::parse($cp['date']) : null,
                                 'gratitudeNumber' => $cp['gratitudeNumber'] ?? null,
                                 'points_breakdown' => $cp['points_breakdown'] ?? null,
                                 'status' => $cp['status'] ?? null,
-                                'created_at' => isset($cp['created_at']) ? Carbon::parse($cp['created_at']) : null,
-                                'updated_at' => isset($cp['updated_at']) ? Carbon::parse($cp['updated_at']) : null,
+                                'created_at' => !empty($cp['created_at']) ? Carbon::parse($cp['created_at']) : null,
+                                'updated_at' => !empty($cp['updated_at']) ? Carbon::parse($cp['updated_at']) : null,
                             ]
                         );
                     }
@@ -100,13 +102,13 @@ class GratitudeController extends Controller
                                 'redeemed_points' => $ep['redeemed_points'] ?? 0,
                                 'redemption_history' => $ep['redemption_history'] ?? null,
                                 'amount' => $ep['amount'] ?? null,
-                                'date' => isset($ep['date']) ? Carbon::parse($ep['date']) : null,
+                                'date' => !empty($ep['date']) ? Carbon::parse($ep['date']) : null,
                                 'description' => $ep['description'] ?? null,
                                 'category' => $ep['category'] ?? null,
                                 'status' => $ep['status'] ?? null,
-                                'expires_at' => isset($ep['expires_at']) ? Carbon::parse($ep['expires_at']) : null,
-                                'created_at' => isset($ep['created_at']) ? Carbon::parse($ep['created_at']) : null,
-                                'updated_at' => isset($ep['updated_at']) ? Carbon::parse($ep['updated_at']) : null,
+                                'expires_at' => !empty($ep['expires_at']) ? Carbon::parse($ep['expires_at']) : null,
+                                'created_at' => !empty($ep['created_at']) ? Carbon::parse($ep['created_at']) : null,
+                                'updated_at' => !empty($ep['updated_at']) ? Carbon::parse($ep['updated_at']) : null,
                             ]
                         );
                     }
@@ -136,14 +138,14 @@ class GratitudeController extends Controller
                                 'redeemed_points' => $bp['redeemed_points'] ?? 0,
                                 'redemption_history' => $bp['redemption_history'] ?? null,
                                 'amount' => $bp['amount'] ?? null,
-                                'date' => isset($bp['date']) ? Carbon::parse($bp['date']) : null,
+                                'date' => !empty($bp['date']) ? Carbon::parse($bp['date']) : null,
                                 'description' => $bp['description'] ?? null,
                                 'category' => $bp['category'] ?? null,
                                 'type' => $bp['type'] ?? null,
                                 'status' => $bp['status'] ?? null,
-                                'expires_at' => isset($bp['expires_at']) ? Carbon::parse($bp['expires_at']) : null,
-                                'created_at' => isset($bp['created_at']) ? Carbon::parse($bp['created_at']) : null,
-                                'updated_at' => isset($bp['updated_at']) ? Carbon::parse($bp['updated_at']) : null,
+                                'expires_at' => !empty($bp['expires_at']) ? Carbon::parse($bp['expires_at']) : null,
+                                'created_at' => !empty($bp['created_at']) ? Carbon::parse($bp['created_at']) : null,
+                                'updated_at' => !empty($bp['updated_at']) ? Carbon::parse($bp['updated_at']) : null,
                             ]
                         );
                     }
@@ -174,8 +176,8 @@ class GratitudeController extends Controller
                                 'roomStatus' => $rp['roomStatus'] ?? null,
                                 'reason' => $rp['description'] ?? 'Imported Redemption',
                                 'status' => $rp['status'] ?? null,
-                                'created_at' => isset($rp['created_at']) ? Carbon::parse($rp['created_at']) : null,
-                                'updated_at' => isset($rp['updated_at']) ? Carbon::parse($rp['updated_at']) : null,
+                                'created_at' => !empty($rp['created_at']) ? Carbon::parse($rp['created_at']) : null,
+                                'updated_at' => !empty($rp['updated_at']) ? Carbon::parse($rp['updated_at']) : null,
                             ]
                         );
                     }
@@ -192,7 +194,7 @@ class GratitudeController extends Controller
                 //                 'user_id'         => $res['user_id'] ?? null,
                 //                 'points'          => $res['points'] ?? 0,
                 //                 'reason'          => $res['reason'] ?? null,
-                //                 'date'            => isset($res['date']) ? Carbon::parse($res['date']) : null,
+                //                 'date'            => !empty($res['date']) ? Carbon::parse($res['date']) : null,
                 //                 'source_type'     => Gratitude::class,
                 //                 'source_id'       => $gratitude->id,
                 //             ]
@@ -298,6 +300,27 @@ class GratitudeController extends Controller
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
 
+        $level = \App\Models\Gratitude\GratitudeLevel::where('name', $gratitude->level)->first();
+        $benefits = [];
+        if ($level) {
+            $benefits = GratitudeBenefit::whereHas('levels', function($q) use ($level) {
+                $q->where('benefit_gratitude_level.gratitude_level_id', $level->id)
+                  ->where('benefit_gratitude_level.is_active', true);
+            })->with(['levels' => function($q) use ($level) {
+                $q->where('benefit_gratitude_level.gratitude_level_id', $level->id);
+            }])->get()->map(function($benefit) {
+                // Simplify the output for the frontend
+                $levelPivot = $benefit->levels->first();
+                return [
+                    'id' => $benefit->id,
+                    'name' => $benefit->name,
+                    'benefit_description' => $benefit->description,
+                    'value' => $levelPivot ? $levelPivot->pivot->value : null,
+                    'level_description' => $levelPivot ? $levelPivot->pivot->description : null,
+                ];
+            });
+        }
+
         $earnedPoints = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->get();
         $bonusPoints = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->get();
         $cancellations = Cancellation::where('gratitudeNumber', $gratitudeNumber)->get();
@@ -328,13 +351,15 @@ class GratitudeController extends Controller
 
         $data = [
             'gratitude' => $gratitude,
+            'level_info' => $level,
             'earned_points' => $earnedPoints,
             'bonus_points' => $bonusPoints,
             'cancellations' => $cancellations,
             'redemptions' => $redemptions,
             'next_level' => $nextLevel,
             'points_to_next_level' => $pointsToNextLevel,
-            'rolling_tier_points' => $rollingTotalActive
+            'rolling_tier_points' => $rollingTotalActive,
+            'level_benefits' => $benefits
         ];
 
         // dd($data);
