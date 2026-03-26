@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use App\Models\User;
-use App\Models\EarnedPoint;
-use App\Models\BonusPoint;
+use App\Models\Gratitude\BonusPoint;
+use App\Models\Gratitude\EarnedPoint;
+use App\Models\Gratitude\Gratitude;
+use App\Services\Gratitude\GratitudeService;
 use App\Services\Gratitude\PointService;
 use App\Services\Gratitude\TierService;
 use Carbon\Carbon;
@@ -18,13 +20,15 @@ class GratitudeServiceTest extends TestCase
     protected $user;
     protected $pointService;
     protected $tierService;
+    protected $gratitudeService;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->user = User::factory()->create();
-        $this->pointService = new PointService();
+        $this->pointService = app(PointService::class);
         $this->tierService = new TierService();
+        $this->gratitudeService = app(GratitudeService::class);
     }
 
     public function test_pending_points_are_activated_on_usable_date()
@@ -116,5 +120,46 @@ class GratitudeServiceTest extends TestCase
         $gratitude = $this->tierService->recalculateTier($this->user->id);
         $this->assertEquals('Explorer', $gratitude->level);
         $this->assertEquals('downgrade', $gratitude->statusChange);
+    }
+
+    public function test_redeem_points_consumes_bonus_first_when_expiry_day_matches()
+    {
+        Gratitude::create([
+            'gratitudeNumber' => 'G-1001',
+            'totalPoints' => 800,
+            'useablePoints' => 800,
+            'level' => 'Explorer',
+        ]);
+
+        $bonus = BonusPoint::create([
+            'user_id' => $this->user->id,
+            'gratitudeNumber' => 'G-1001',
+            'date' => Carbon::parse('2026-03-01'),
+            'points' => 300,
+            'status' => true,
+            'description' => 'Bonus batch',
+            'expires_at' => Carbon::parse('2026-04-15 23:59:59'),
+        ]);
+
+        $earned = EarnedPoint::create([
+            'user_id' => $this->user->id,
+            'gratitudeNumber' => 'G-1001',
+            'date' => Carbon::parse('2026-03-01'),
+            'usable_date' => Carbon::parse('2026-03-01'),
+            'points' => 500,
+            'status' => 'active',
+            'description' => 'Earned batch',
+            'expires_at' => Carbon::parse('2026-04-15 00:00:01'),
+        ]);
+
+        $redemption = $this->gratitudeService->redeemPoints('G-1001', ['reason' => 'Test redeem'], 350);
+
+        $this->assertNotFalse($redemption);
+
+        $bonus->refresh();
+        $earned->refresh();
+
+        $this->assertEquals(300, $bonus->redeemed_points);
+        $this->assertEquals(50, $earned->redeemed_points);
     }
 }

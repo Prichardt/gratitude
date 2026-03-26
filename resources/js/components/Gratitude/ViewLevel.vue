@@ -99,6 +99,24 @@ watch(isOpen, (newVal) => {
                             }}
                         </div>
                     </div>
+                    <div>
+                        <span
+                            class="text-xs font-semibold text-muted-foreground uppercase"
+                            >Earned Expiry</span
+                        >
+                        <div class="mt-1 text-base font-medium">
+                            {{ level.earned_expire_days || 730 }} days
+                        </div>
+                    </div>
+                    <div>
+                        <span
+                            class="text-xs font-semibold text-muted-foreground uppercase"
+                            >Bonus Expiry</span
+                        >
+                        <div class="mt-1 text-base font-medium">
+                            {{ level.bonus_expire_days || 730 }} days
+                        </div>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-6 border-t border-border pt-4">

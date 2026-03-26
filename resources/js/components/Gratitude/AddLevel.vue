@@ -13,6 +13,9 @@ const form = ref({
     min_points: 0,
     max_points: '' as string | number,
     status: true,
+    redeemation_points_per_dollar: 35,
+    earned_expire_days: 730,
+    bonus_expire_days: 730,
 });
 const levelImage = ref<File | null>(null);
 const levelIcon = ref<File | null>(null);
@@ -45,6 +48,9 @@ const submit = async () => {
             formData.append('max_points', String(form.value.max_points));
         }
         formData.append('status', String(form.value.status));
+        formData.append('redeemation_points_per_dollar', String(form.value.redeemation_points_per_dollar));
+        formData.append('earned_expire_days', String(form.value.earned_expire_days));
+        formData.append('bonus_expire_days', String(form.value.bonus_expire_days));
         
         if (levelImage.value) formData.append('level_image', levelImage.value);
         if (levelIcon.value) formData.append('level_icon', levelIcon.value);
@@ -55,7 +61,15 @@ const submit = async () => {
         });
         
         isOpen.value = false;
-        form.value = { name: '', min_points: 0, max_points: '', status: true };
+        form.value = {
+            name: '',
+            min_points: 0,
+            max_points: '',
+            status: true,
+            redeemation_points_per_dollar: 35,
+            earned_expire_days: 730,
+            bonus_expire_days: 730,
+        };
         levelImage.value = null;
         levelIcon.value = null;
         rules.value = [];
@@ -90,6 +104,21 @@ const submit = async () => {
                         <div>
                             <Label>Max Points (Leave blank for ∞)</Label>
                             <Input type="number" v-model="form.max_points" />
+                        </div>
+                        <div class="col-span-2">
+                            <Label>Points Per Dollar (Redemption Rate)</Label>
+                            <Input type="number" step="0.01" min="1" v-model="form.redeemation_points_per_dollar" required />
+                            <p class="text-xs text-muted-foreground mt-1">How many points equal $1 in value. Explorer=35, Globetrotter=30, Jetsetter=25</p>
+                        </div>
+                        <div>
+                            <Label>Earned Points Expire After (Days)</Label>
+                            <Input type="number" min="1" v-model="form.earned_expire_days" required />
+                            <p class="text-xs text-muted-foreground mt-1">Default is 730 days (2 years).</p>
+                        </div>
+                        <div>
+                            <Label>Bonus Points Expire After (Days)</Label>
+                            <Input type="number" min="1" v-model="form.bonus_expire_days" required />
+                            <p class="text-xs text-muted-foreground mt-1">Set a different expiry for bonus points if needed.</p>
                         </div>
                     </div>
 

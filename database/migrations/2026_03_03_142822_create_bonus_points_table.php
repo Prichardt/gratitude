@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
@@ -28,11 +27,16 @@ return new class extends Migration
             $table->string('amount')->nullable();
             $table->string('description')->nullable();
             $table->bigInteger('cancel_id')->nullable();
-            $table->string('status')->nullable()->default('active'); // active, expired
-            $table->timestamp('usable_date')->nullable();
-            $table->timestamp('expires_at')->nullable(); // Award date + 2 years
+            $table->boolean('status')->nullable()->default(true); // active, expired
             $table->softDeletes();
             $table->timestamps();
+
+
+            $table->timestamp('usable_date')
+                ->nullable()
+                ->virtualAs('COALESCE(TIMESTAMP(`date`), `created_at`)');
+
+            $table->timestamp('expires_at')->nullable();
         });
     }
 

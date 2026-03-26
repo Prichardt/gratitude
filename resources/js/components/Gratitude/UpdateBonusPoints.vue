@@ -17,10 +17,8 @@ const toDateInput = (val: string | null | undefined) => val ? val.split('T')[0] 
 
 const form = ref({
     date: toDateInput(props.point.date),
-    category: props.point.category,
-    points: props.point.points,
-    amount: props.point.amount,
     description: props.point.description,
+    points: props.point.points,
     expires_at: toDateInput(props.point.expires_at),
 });
 
@@ -31,21 +29,19 @@ watch(isOpen, (open) => {
 
     form.value = {
         date: toDateInput(props.point.date),
-        category: props.point.category,
-        points: props.point.points,
-        amount: props.point.amount,
         description: props.point.description,
+        points: props.point.points,
         expires_at: toDateInput(props.point.expires_at),
     };
 });
 
 const submit = async () => {
     try {
-        await axios.put(`/internal-api/gratitude/${props.gratitudeNumber}/earned/${props.point.id}`, form.value);
+        await axios.put(`/internal-api/gratitude/${props.gratitudeNumber}/bonus/${props.point.id}`, form.value);
         isOpen.value = false;
         emit('saved');
     } catch (error) {
-        console.error('Error updating earned points', error);
+        console.error('Error updating bonus points', error);
     }
 };
 </script>
@@ -55,28 +51,20 @@ const submit = async () => {
         <Button @click="isOpen = true" variant="outline" size="sm">Edit</Button>
 
         <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 text-left px-4">
-            <div class="bg-card w-full max-w-lg p-6 rounded-lg shadow-lg border border-border">
-                <h2 class="text-xl font-bold mb-4">Update Earned Points</h2>
+            <div class="bg-card w-full max-w-md p-6 rounded-lg shadow-lg border border-border">
+                <h2 class="text-xl font-bold mb-4">Update Bonus Points</h2>
                 <form @submit.prevent="submit" class="space-y-4">
                     <div>
                         <Label>Date</Label>
                         <Input type="date" v-model="form.date" required />
                     </div>
                     <div>
-                        <Label>Category</Label>
-                        <Input v-model="form.category" required />
-                    </div>
-                    <div>
-                        <Label>Amount</Label>
-                        <Input type="number" step="0.01" v-model="form.amount" required />
+                        <Label>Description/Reason</Label>
+                        <Input v-model="form.description" required />
                     </div>
                     <div>
                         <Label>Points</Label>
                         <Input type="number" v-model="form.points" required />
-                    </div>
-                    <div>
-                        <Label>Description</Label>
-                        <Input v-model="form.description" required />
                     </div>
                     <div>
                         <Label>Expiry Date <span class="text-muted-foreground font-normal">(override)</span></Label>

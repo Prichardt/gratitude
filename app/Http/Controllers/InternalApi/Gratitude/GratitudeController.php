@@ -10,6 +10,8 @@ use App\Models\Gratitude\Gratitude;
 use App\Models\Gratitude\GratitudeBenefit;
 use App\Models\Gratitude\GratitudeReserve;
 use App\Models\Gratitude\RedeemPoints;
+use App\Services\Gratitude\PointExpiryService;
+use App\Services\Gratitude\GratitudeService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,10 +19,20 @@ use Illuminate\Support\Facades\Http;
 
 class GratitudeController extends Controller
 {
+    protected $gratitudeService;
+    protected $pointExpiryService;
+
+    public function __construct(GratitudeService $gratitudeService, PointExpiryService $pointExpiryService)
+    {
+        $this->gratitudeService = $gratitudeService;
+        $this->pointExpiryService = $pointExpiryService;
+    }
     public function import()
     {
         // Added withoutVerifying() to fix the cURL 60 SSL certificate error on local WAMP
         $getResponse = Http::withoutVerifying()->timeout(600)->get('http://aivteam.local/api/get/graitude-data-all/open/gratitude');
+
+        $getJourneysData = Http::withoutVerifying()->timeout(600)->get('http://aivteam.local/api/get/all/journeys');
 
         if (!$getResponse->successful()) {
             return response()->json(['message' => 'Failed to fetch data from remote API', 'status' => $getResponse->status()], 500);
@@ -33,12 +45,22 @@ class GratitudeController extends Controller
             return response()->json(['message' => 'Invalid data format or empty payload'], 400);
         }
 
+        $journeysData = $getJourneysData->successful() ? $getJourneysData->json() : [];
+        $journeysMap = [];
+        if (!empty($journeysData) && is_array($journeysData)) {
+            foreach ($journeysData as $j) {
+                if (isset($j['id'])) {
+                    $journeysMap[$j['id']] = $j;
+                }
+            }
+        }
+
         DB::beginTransaction();
 
         try {
             foreach ($data as $record) {
                 // Map Gratitude Model
-                Gratitude::updateOrCreate(
+                $gratitude = Gratitude::updateOrCreate(
                     ['old_id' => $record['id']],
                     [
                         'gratitudeNumber' => $record['gratitudeNumber'] ?? null,
@@ -54,10 +76,26 @@ class GratitudeController extends Controller
                     ]
                 );
 
+                $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
+
 
                 // Cancellation Points
                 if (isset($record['cancellationPoints']) && is_array($record['cancellationPoints'])) {
                     foreach ($record['cancellationPoints'] as $cp) {
+                        $fallback_date = null;
+                        if (!empty($cp['date'])) {
+                            $parsedDate = Carbon::parse($cp['date']);
+                            if ($parsedDate->year > 1970) {
+                                $fallback_date = $parsedDate;
+                            }
+                        }
+                        if (!$fallback_date && !empty($cp['created_at'])) {
+                            $parsedDate = Carbon::parse($cp['created_at']);
+                            if ($parsedDate->year > 1970) {
+                                $fallback_date = $parsedDate;
+                            }
+                        }
+
                         Cancellation::updateOrCreate(
                             ['old_id' => $cp['id']],
                             [
@@ -67,7 +105,7 @@ class GratitudeController extends Controller
                                 'amount' => $cp['amount'] ?? 0,
                                 'category' => $cp['category'] ?? null,
                                 'description' => $cp['description'] ?? null,
-                                'date' => !empty($cp['date']) ? Carbon::parse($cp['date']) : null,
+                                'date' => $fallback_date,
                                 'gratitudeNumber' => $cp['gratitudeNumber'] ?? null,
                                 'points_breakdown' => $cp['points_breakdown'] ?? null,
                                 'status' => $cp['status'] ?? null,
@@ -91,6 +129,39 @@ class GratitudeController extends Controller
                             }
                         }
 
+                        $fallback_date = null;
+                        if (!empty($ep['date'])) {
+                            $parsedDate = Carbon::parse($ep['date']);
+                            if ($parsedDate->year > 1970) {
+                                $fallback_date = $parsedDate;
+                            }
+                        }
+                        if (!$fallback_date && !empty($ep['created_at'])) {
+                            $parsedDate = Carbon::parse($ep['created_at']);
+                            if ($parsedDate->year > 1970) {
+                                $fallback_date = $parsedDate;
+                            }
+                        }
+
+                        $usable_date = null;
+                        $journeyToSave = null;
+                        if (!empty($ep['journey_id']) && isset($journeysMap[$ep['journey_id']])) {
+                            $journey = $journeysMap[$ep['journey_id']];
+                            $journeyToSave = $journey;
+                            if (!empty($journey['endDate'])) {
+                                $parsedDate = Carbon::parse($journey['endDate']);
+                                if ($parsedDate->year > 1970) {
+                                    $usable_date = $parsedDate;
+                                }
+                            }
+                        }
+
+                        if (!$usable_date && $fallback_date) {
+                            $usable_date = $fallback_date->copy();
+                        }
+
+                        $expires_at = $this->pointExpiryService->calculateEarnedExpiry($usable_date, $level);
+
                         EarnedPoint::updateOrCreate(
                             ['old_id' => $ep['id']],
                             [
@@ -102,11 +173,13 @@ class GratitudeController extends Controller
                                 'redeemed_points' => $ep['redeemed_points'] ?? 0,
                                 'redemption_history' => $ep['redemption_history'] ?? null,
                                 'amount' => $ep['amount'] ?? null,
-                                'date' => !empty($ep['date']) ? Carbon::parse($ep['date']) : null,
+                                'date' => $fallback_date,
                                 'description' => $ep['description'] ?? null,
                                 'category' => $ep['category'] ?? null,
-                                'status' => $ep['status'] ?? null,
-                                'expires_at' => !empty($ep['expires_at']) ? Carbon::parse($ep['expires_at']) : null,
+                                'status' => $this->normalizeImportedEarnedStatus($ep['status'] ?? null, $usable_date),
+                                'usable_date' => $usable_date,
+                                'expires_at' => $expires_at,
+                                'project_data' => $journeyToSave,
                                 'created_at' => !empty($ep['created_at']) ? Carbon::parse($ep['created_at']) : null,
                                 'updated_at' => !empty($ep['updated_at']) ? Carbon::parse($ep['updated_at']) : null,
                             ]
@@ -127,6 +200,24 @@ class GratitudeController extends Controller
                             }
                         }
 
+                        $fallback_date = null;
+                        if (!empty($bp['date'])) {
+                            $parsedDate = Carbon::parse($bp['date']);
+                            if ($parsedDate->year > 1970) {
+                                $fallback_date = $parsedDate;
+                            }
+                        }
+                        if (!$fallback_date && !empty($bp['created_at'])) {
+                            $parsedDate = Carbon::parse($bp['created_at']);
+                            if ($parsedDate->year > 1970) {
+                                $fallback_date = $parsedDate;
+                            }
+                        }
+
+                        $usable_date = $fallback_date ? $fallback_date->copy() : null;
+
+                        $expires_at = $this->pointExpiryService->calculateBonusExpiry($usable_date, $level);
+
                         BonusPoint::updateOrCreate(
                             ['old_id' => $bp['id']],
                             [
@@ -138,12 +229,12 @@ class GratitudeController extends Controller
                                 'redeemed_points' => $bp['redeemed_points'] ?? 0,
                                 'redemption_history' => $bp['redemption_history'] ?? null,
                                 'amount' => $bp['amount'] ?? null,
-                                'date' => !empty($bp['date']) ? Carbon::parse($bp['date']) : null,
+                                'date' => $fallback_date,
                                 'description' => $bp['description'] ?? null,
                                 'category' => $bp['category'] ?? null,
                                 'type' => $bp['type'] ?? null,
-                                'status' => $bp['status'] ?? null,
-                                'expires_at' => !empty($bp['expires_at']) ? Carbon::parse($bp['expires_at']) : null,
+                                'status' => $this->normalizeImportedBonusStatus($bp['status'] ?? null),
+                                'expires_at' => $expires_at,
                                 'created_at' => !empty($bp['created_at']) ? Carbon::parse($bp['created_at']) : null,
                                 'updated_at' => !empty($bp['updated_at']) ? Carbon::parse($bp['updated_at']) : null,
                             ]
@@ -303,26 +394,28 @@ class GratitudeController extends Controller
         $level = \App\Models\Gratitude\GratitudeLevel::where('name', $gratitude->level)->first();
         $benefits = [];
         if ($level) {
-            $benefits = GratitudeBenefit::whereHas('levels', function($q) use ($level) {
+            $benefits = GratitudeBenefit::whereHas('levels', function ($q) use ($level) {
                 $q->where('benefit_gratitude_level.gratitude_level_id', $level->id)
-                  ->where('benefit_gratitude_level.is_active', true);
-            })->with(['levels' => function($q) use ($level) {
-                $q->where('benefit_gratitude_level.gratitude_level_id', $level->id);
-            }])->get()->map(function($benefit) {
-                // Simplify the output for the frontend
-                $levelPivot = $benefit->levels->first();
-                return [
-                    'id' => $benefit->id,
-                    'name' => $benefit->name,
-                    'benefit_description' => $benefit->description,
-                    'value' => $levelPivot ? $levelPivot->pivot->value : null,
-                    'level_description' => $levelPivot ? $levelPivot->pivot->description : null,
-                ];
-            });
+                    ->where('benefit_gratitude_level.is_active', true);
+            })->with([
+                        'levels' => function ($q) use ($level) {
+                            $q->where('benefit_gratitude_level.gratitude_level_id', $level->id);
+                        }
+                    ])->get()->map(function ($benefit) {
+                        // Simplify the output for the frontend
+                        $levelPivot = $benefit->levels->first();
+                        return [
+                            'id' => $benefit->id,
+                            'name' => $benefit->name,
+                            'benefit_description' => $benefit->description,
+                            'value' => $levelPivot ? $levelPivot->pivot->value : null,
+                            'level_description' => $levelPivot ? $levelPivot->pivot->description : null,
+                        ];
+                    });
         }
 
-        $earnedPoints = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->get();
-        $bonusPoints = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->get();
+        $earnedPoints = EarnedPoint::with(['cancellation', 'redemptions.redeemPoint'])->where('gratitudeNumber', $gratitudeNumber)->get();
+        $bonusPoints = BonusPoint::with(['cancellation', 'redemptions.redeemPoint'])->where('gratitudeNumber', $gratitudeNumber)->get();
         $cancellations = Cancellation::where('gratitudeNumber', $gratitudeNumber)->get();
         $redemptions = RedeemPoints::where('gratitudeNumber', $gratitudeNumber)->get();
 
@@ -330,7 +423,7 @@ class GratitudeController extends Controller
 
         // Sum the TOTAL remaining tier points that became usable in the last 2 years
         $rollingTotalActive = EarnedPoint::where('user_id', $gratitude->user_id)
-            ->where('status', 'active')
+            ->activeStatus()
             ->where(function ($query) use ($twoYearsAgo) {
                 // If the table doesn't have usable_date, fallback to date or created_at
                 $query->where('date', '>=', $twoYearsAgo)
@@ -359,10 +452,9 @@ class GratitudeController extends Controller
             'next_level' => $nextLevel,
             'points_to_next_level' => $pointsToNextLevel,
             'rolling_tier_points' => $rollingTotalActive,
-            'level_benefits' => $benefits
+            'level_benefits' => $benefits,
+            'points_per_dollar' => $level ? (float) $level->redeemation_points_per_dollar : 35,
         ];
-
-        // dd($data);
 
         return response()->json($data);
     }
@@ -372,26 +464,30 @@ class GratitudeController extends Controller
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
 
         $request->validate([
-            'date' => 'required',
-            'category' => 'required',
-            'points' => 'required|numeric',
-            'amount' => 'required|numeric',
-            'description' => 'required',
+            'date' => 'required|date',
+            'category' => 'required|string|max:255',
+            'points' => 'required|numeric|min:1',
+            'amount' => 'required|numeric|min:0',
+            'description' => 'required|string',
         ]);
+
+        $usableDate = Carbon::parse($request->date);
+        $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
 
         $point = EarnedPoint::create([
             'user_id' => $gratitude->user_id,
             'gratitudeNumber' => $gratitudeNumber,
-            'date' => $request->date,
+            'date' => $usableDate,
             'category' => $request->category,
             'points' => $request->points,
             'amount' => $request->amount,
             'description' => $request->description,
-            'status' => 'approved',
+            'status' => 'active',
+            'usable_date' => $usableDate,
+            'expires_at' => $this->pointExpiryService->calculateEarnedExpiry($usableDate, $level),
         ]);
 
-        $gratitude->increment('useablePoints', $request->points);
-        $gratitude->increment('totalPoints', $request->points);
+        GratitudeService::syncAccountBalance($gratitudeNumber);
 
         return response()->json(['message' => 'Points added', 'point' => $point]);
     }
@@ -399,22 +495,37 @@ class GratitudeController extends Controller
     public function apiUpdateEarned(Request $request, $gratitudeNumber, $id)
     {
         $point = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
 
         $request->validate([
-            'date' => 'required',
-            'category' => 'required',
-            'points' => 'required|numeric',
-            'amount' => 'required|numeric',
-            'description' => 'required',
+            'date' => 'required|date',
+            'category' => 'required|string|max:255',
+            'points' => 'required|numeric|min:1',
+            'amount' => 'required|numeric|min:0',
+            'description' => 'required|string',
+            'expires_at' => 'nullable|date',
         ]);
 
-        // Adjust gratitude totals
-        $diff = $request->points - $point->points;
-        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
-        $gratitude->increment('useablePoints', $diff);
-        $gratitude->increment('totalPoints', $diff);
+        $usableDate = Carbon::parse($request->date);
+        $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
+        $isManual = $request->filled('expires_at');
+        $expiresAt = $isManual
+            ? Carbon::parse($request->expires_at)
+            : $this->pointExpiryService->calculateEarnedExpiry($usableDate, $level);
 
-        $point->update($request->only('date', 'category', 'points', 'amount', 'description'));
+        $point->update([
+            'date' => $usableDate,
+            'category' => $request->category,
+            'points' => $request->points,
+            'amount' => $request->amount,
+            'description' => $request->description,
+            'usable_date' => $usableDate,
+            'expires_at' => $expiresAt,
+            'expires_at_manual' => $isManual,
+            'status' => $point->status === 'pending' && $usableDate->isFuture() ? 'pending' : 'active',
+        ]);
+
+        GratitudeService::syncAccountBalance($gratitudeNumber);
 
         return response()->json(['message' => 'Points updated', 'point' => $point]);
     }
@@ -424,23 +535,60 @@ class GratitudeController extends Controller
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
 
         $request->validate([
-            'date' => 'required',
-            'description' => 'required',
-            'points' => 'required|numeric',
+            'date' => 'required|date',
+            'description' => 'required|string',
+            'points' => 'required|numeric|min:1',
         ]);
+
+        $effectiveDate = Carbon::parse($request->date);
+        $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
 
         $point = BonusPoint::create([
             'user_id' => $gratitude->user_id,
             'gratitudeNumber' => $gratitudeNumber,
-            'date' => $request->date,
+            'date' => $effectiveDate,
             'description' => $request->description,
             'points' => $request->points,
+            'expires_at' => $this->pointExpiryService->calculateBonusExpiry($effectiveDate, $level),
+            'status' => true,
         ]);
 
-        $gratitude->increment('useablePoints', $request->points);
-        $gratitude->increment('totalPoints', $request->points);
+        GratitudeService::syncAccountBalance($gratitudeNumber);
 
         return response()->json(['message' => 'Bonus points added', 'point' => $point]);
+    }
+
+    public function apiUpdateBonus(Request $request, $gratitudeNumber, $id)
+    {
+        $point = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
+
+        $request->validate([
+            'date' => 'required|date',
+            'description' => 'required|string',
+            'points' => 'required|numeric|min:1',
+            'expires_at' => 'nullable|date',
+        ]);
+
+        $effectiveDate = Carbon::parse($request->date);
+        $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
+        $isManual = $request->filled('expires_at');
+        $expiresAt = $isManual
+            ? Carbon::parse($request->expires_at)
+            : $this->pointExpiryService->calculateBonusExpiry($effectiveDate, $level);
+
+        $point->update([
+            'date' => $effectiveDate,
+            'description' => $request->description,
+            'points' => $request->points,
+            'expires_at' => $expiresAt,
+            'expires_at_manual' => $isManual,
+            'status' => true,
+        ]);
+
+        GratitudeService::syncAccountBalance($gratitudeNumber);
+
+        return response()->json(['message' => 'Bonus points updated', 'point' => $point]);
     }
 
     public function apiCancelPoints(Request $request, $gratitudeNumber)
@@ -457,8 +605,15 @@ class GratitudeController extends Controller
             'cancellation_points' => $request->cancellation_points,
         ]);
 
-        $gratitude->decrement('useablePoints', $request->cancellation_points);
-        $gratitude->decrement('totalPoints', $request->cancellation_points);
+        // Let's also mark a specific EarnedPoint as cancelled if passed
+        if ($request->filled('earned_point_id')) {
+            EarnedPoint::where('id', $request->earned_point_id)->update(['cancel_id' => $cancel->id]);
+        }
+        if ($request->filled('bonus_point_id')) {
+            BonusPoint::where('id', $request->bonus_point_id)->update(['cancel_id' => $cancel->id]);
+        }
+
+        GratitudeService::syncAccountBalance($gratitudeNumber);
 
         return response()->json(['message' => 'Points cancelled', 'cancellation' => $cancel]);
     }
@@ -477,9 +632,74 @@ class GratitudeController extends Controller
             'cancellation_points' => $request->points,
         ]);
 
-        $gratitude->decrement('useablePoints', $request->points);
-        // Expiration might not decrement totalPoints depending on rules, but we'll decrement useable.
+        GratitudeService::syncAccountBalance($gratitudeNumber);
 
         return response()->json(['message' => 'Points expired', 'cancellation' => $cancel]);
+    }
+
+    public function apiAddRedeem(Request $request, $gratitudeNumber)
+    {
+        $request->validate([
+            'points' => 'required|numeric|min:1',
+            'amount' => 'nullable|numeric',
+            'reason' => 'nullable|string'
+        ]);
+
+
+
+        $result = $this->gratitudeService->redeemPoints($gratitudeNumber, $request->all(), $request->points);
+
+        if (!$result) {
+            return response()->json(['message' => 'Insufficient points or invalid request.'], 400);
+        }
+
+        GratitudeService::syncAccountBalance($gratitudeNumber);
+
+        return response()->json(['message' => 'Points redeemed successfully!', 'redemption' => $result]);
+    }
+
+    public function apiShowRedemption($gratitudeNumber, $id)
+    {
+        $redemption = \App\Models\Gratitude\RedeemPoints::with('details.source')->findOrFail($id);
+        return response()->json($redemption);
+    }
+
+    public function apiUpdateRedemption(Request $request, $gratitudeNumber, $id)
+    {
+        $request->validate([
+            'amount' => 'nullable|numeric',
+            'reason' => 'nullable|string'
+        ]);
+
+        $redemption = GratitudeService::updateRedemption($id, $request->all());
+        GratitudeService::syncAccountBalance($gratitudeNumber);
+        return response()->json(['message' => 'Redemption updated', 'redemption' => $redemption]);
+    }
+
+    public function apiDeleteRedemption($gratitudeNumber, $id)
+    {
+        $success = GratitudeService::deleteRedemption($id);
+        if (!$success) {
+            return response()->json(['message' => 'Failed to delete redemption'], 500);
+        }
+        return response()->json(['message' => 'Redemption removed securely']);
+    }
+
+    protected function normalizeImportedEarnedStatus(mixed $status, ?Carbon $usableDate): string
+    {
+        if (in_array($status, ['expired', false, 0, '0'], true)) {
+            return 'expired';
+        }
+
+        if ($usableDate && $usableDate->isFuture()) {
+            return 'pending';
+        }
+
+        return 'active';
+    }
+
+    protected function normalizeImportedBonusStatus(mixed $status): bool
+    {
+        return !in_array($status, ['expired', false, 0, '0'], true);
     }
 }

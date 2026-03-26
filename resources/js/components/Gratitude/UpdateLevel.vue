@@ -25,7 +25,11 @@ const rules = ref<{name: string, value: string, status: boolean, value_type: str
 // Pre-fill rules when opening
 watch(isOpen, (newVal) => {
     if (newVal) {
-        form.value = { ...props.level };
+        form.value = {
+            ...props.level,
+            earned_expire_days: props.level.earned_expire_days ?? 730,
+            bonus_expire_days: props.level.bonus_expire_days ?? 730,
+        };
         levelImage.value = null;
         levelIcon.value = null;
         if (props.level.level_rules) {
@@ -65,6 +69,11 @@ const submit = async () => {
             formData.append('max_points', String(form.value.max_points));
         }
         formData.append('status', String(form.value.status));
+        if (form.value.redeemation_points_per_dollar) {
+            formData.append('redeemation_points_per_dollar', String(form.value.redeemation_points_per_dollar));
+        }
+        formData.append('earned_expire_days', String(form.value.earned_expire_days || 730));
+        formData.append('bonus_expire_days', String(form.value.bonus_expire_days || 730));
         
         if (levelImage.value) formData.append('level_image', levelImage.value);
         if (levelIcon.value) formData.append('level_icon', levelIcon.value);
@@ -107,6 +116,19 @@ const submit = async () => {
                         <div>
                             <Label>Max Points (Leave blank for ∞)</Label>
                             <Input type="number" v-model="form.max_points" />
+                        </div>
+                        <div class="col-span-2">
+                            <Label>Points Per Dollar (Redemption Rate)</Label>
+                            <Input type="number" step="0.01" min="1" v-model="form.redeemation_points_per_dollar" required />
+                            <p class="text-xs text-muted-foreground mt-1">How many points equal $1 in value. Explorer=35, Globetrotter=30, Jetsetter=25</p>
+                        </div>
+                        <div>
+                            <Label>Earned Points Expire After (Days)</Label>
+                            <Input type="number" min="1" v-model="form.earned_expire_days" required />
+                        </div>
+                        <div>
+                            <Label>Bonus Points Expire After (Days)</Label>
+                            <Input type="number" min="1" v-model="form.bonus_expire_days" required />
                         </div>
                     </div>
 

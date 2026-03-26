@@ -18,6 +18,7 @@ Route::name('gratitude.')->prefix('gratitude/')
         Route::post('{gratitudeNumber}/earned', [GratitudeController::class, 'apiAddEarned'])->name('earned');
         Route::put('{gratitudeNumber}/earned/{id}', [GratitudeController::class, 'apiUpdateEarned'])->name('earned.update');
         Route::post('{gratitudeNumber}/bonus', [GratitudeController::class, 'apiAddBonus'])->name('bonus');
+        Route::put('{gratitudeNumber}/bonus/{id}', [GratitudeController::class, 'apiUpdateBonus'])->name('bonus.update');
         Route::post('{gratitudeNumber}/cancel', [GratitudeController::class, 'apiCancelPoints'])->name('cancel');
         Route::post('{gratitudeNumber}/expire', [GratitudeController::class, 'apiExpirePoints'])->name('expire');
 
@@ -39,4 +40,10 @@ Route::name('gratitude.')->prefix('gratitude/')
 
         // Import Benefits
         Route::get('migrate-benefits/data', [GratitudeBenefitController::class, 'importBenefits'])->name('migrate-benefits.data');
+
+        // Redemption CRUD
+        Route::post('{gratitudeNumber}/redeem', [GratitudeController::class, 'apiAddRedeem'])->name('redeem');
+        Route::get('{gratitudeNumber}/redeem/{id}', [GratitudeController::class, 'apiShowRedemption'])->name('redeem.show');
+        Route::put('{gratitudeNumber}/redeem/{id}', [GratitudeController::class, 'apiUpdateRedemption'])->name('redeem.update');
+        Route::delete('{gratitudeNumber}/redeem/{id}', [GratitudeController::class, 'apiDeleteRedemption'])->name('redeem.destroy');
     });

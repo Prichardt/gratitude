@@ -19,7 +19,7 @@ class ExpirePoints extends Command
      *
      * @var string
      */
-    protected $description = 'Marks active points that have exceeded their 2-year lifespan as expired.';
+    protected $description = 'Marks points as expired once they pass the configured expiry days for their level.';
 
     /**
      * Execute the console command.

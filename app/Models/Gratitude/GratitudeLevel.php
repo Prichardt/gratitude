@@ -22,6 +22,8 @@ class GratitudeLevel extends Model
         'max_points',
         'status',
         'redeemation_points_per_dollar',
+        'earned_expire_days',
+        'bonus_expire_days',
         'stay_active_rules',
         'level_rules',
         'level_image',
@@ -30,6 +32,9 @@ class GratitudeLevel extends Model
 
     protected $casts = [
         'level_rules' => 'array',
+        'status' => 'boolean',
+        'earned_expire_days' => 'integer',
+        'bonus_expire_days' => 'integer',
     ];
 
     public function benefits()

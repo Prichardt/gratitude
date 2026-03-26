@@ -34,11 +34,15 @@ class BonusPoint extends Model
         'amount',
         'description',
         'status',
-        'expires_at'
+        'usable_date',
+        'expires_at',
+        'expires_at_manual',
     ];
 
     protected $casts = [
+        'usable_date' => 'date',
         'expires_at' => 'datetime',
+        'expires_at_manual' => 'boolean',
         'date' => 'date',
         'redemption_history' => 'array',
     ];
@@ -51,5 +55,15 @@ class BonusPoint extends Model
     public function redemptions()
     {
         return $this->morphMany(RedeemPointsDetails::class, 'source');
+    }
+
+    public function cancellation()
+    {
+        return $this->belongsTo(Cancellation::class, 'cancel_id');
+    }
+
+    public function scopeActiveStatus($query)
+    {
+        return $query->whereIn('status', [true, 1, '1', 'active']);
     }
 }

@@ -34,15 +34,19 @@ class EarnedPoint extends Model
         'category',
         'status',
         'usable_date',
-        'expires_at'
+        'expires_at',
+        'expires_at_manual',
+        'project_data'
     ];
 
     protected $casts = [
         'usable_date' => 'date',
         'expires_at' => 'datetime',
+        'expires_at_manual' => 'boolean',
         'date' => 'date',
         'redemption_history' => 'array',
         'points_breakdown' => 'array',
+        'project_data' => 'array',
     ];
 
     public function user()
@@ -53,5 +57,15 @@ class EarnedPoint extends Model
     public function redemptions()
     {
         return $this->morphMany(RedeemPointsDetails::class, 'source');
+    }
+
+    public function cancellation()
+    {
+        return $this->belongsTo(Cancellation::class, 'cancel_id');
+    }
+
+    public function scopeActiveStatus($query)
+    {
+        return $query->whereIn('status', ['active', 'approved', 1, '1']);
     }
 }

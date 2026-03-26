@@ -4,7 +4,7 @@ namespace App\Services\Gratitude;
 
 use App\Models\Gratitude\EarnedPoint;
 use App\Models\Gratitude\BonusPoint;
-use App\Models\Gratitude;
+use App\Models\Gratitude\Gratitude;
 use Carbon\Carbon;
 
 class TierService
@@ -26,7 +26,7 @@ class TierService
 
         // Sum the TOTAL remaining tier points that became usable in the last 2 years (and are still active)
         $rollingTotalActive = EarnedPoint::where('user_id', $userId)
-            ->where('status', 'active')
+            ->activeStatus()
             ->where('usable_date', '>=', $twoYearsAgo)
             ->sum(EarnedPoint::raw('points - redeemed_points'));
 
@@ -54,11 +54,11 @@ class TierService
 
         // Also recalculate the current total usable points across both Bonus and Earned
         $totalUsableEarned = EarnedPoint::where('user_id', $userId)
-            ->where('status', 'active')
+            ->activeStatus()
             ->sum(EarnedPoint::raw('points - redeemed_points'));
 
         $totalUsableBonus = BonusPoint::where('user_id', $userId)
-            ->where('status', 'active')
+            ->activeStatus()
             ->sum(BonusPoint::raw('points - redeemed_points'));
 
         $totalUsable = $totalUsableEarned + $totalUsableBonus;
@@ -115,7 +115,7 @@ class TierService
 
         // Check Bonus Points balance
         $bonusBalance = BonusPoint::where('user_id', $userId)
-            ->where('status', 'active')
+            ->activeStatus()
             ->sum(BonusPoint::raw('points - redeemed_points'));
 
         if ($bonusBalance <= 0) {

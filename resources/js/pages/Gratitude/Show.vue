@@ -6,11 +6,17 @@ import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 import AddEarnedPoints from '@/components/Gratitude/AddEarnedPoints.vue';
 import AddBonusPoints from '@/components/Gratitude/AddBonusPoints.vue';
+import UpdateEarnedPoints from '@/components/Gratitude/UpdateEarnedPoints.vue';
+import UpdateBonusPoints from '@/components/Gratitude/UpdateBonusPoints.vue';
 import CancelPoints from '@/components/Gratitude/CancelPoints.vue';
 import ExpirePoints from '@/components/Gratitude/ExpirePoints.vue';
+import AddRedemption from '@/components/Gratitude/AddRedemption.vue';
+import DeleteRedemption from '@/components/Gratitude/DeleteRedemption.vue';
+import UpdateRedemption from '@/components/Gratitude/UpdateRedemption.vue';
+import ViewEntryDetails from '@/components/Gratitude/ViewEntryDetails.vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, ChevronDown, ChevronRight, Award, History, Gift, ShieldAlert, Zap } from 'lucide-vue-next';
+import { ArrowLeft, ChevronDown, ChevronRight, Award, History, Gift, ShieldAlert, Zap, Clock } from 'lucide-vue-next';
 
 const props = defineProps({
     gratitudeNumber: {
@@ -34,7 +40,8 @@ const data = ref<any>({
     next_level: null,
     points_to_next_level: 0,
     rolling_tier_points: 0,
-    level_benefits: []
+    level_benefits: [],
+    points_per_dollar: 35,
 });
 
 const fetchDetails = async () => {
@@ -69,36 +76,104 @@ const totalPoints = computed(() => {
 const usablePoints = computed(() => {
     return data.value.gratitude?.useablePoints || 0;
 });
+const earnedExpireDays = computed(() => Number(data.value.level_info?.earned_expire_days || 730));
+const bonusExpireDays = computed(() => Number(data.value.level_info?.bonus_expire_days || 730));
+const expiredPointsSum = computed(() => {
+    const now = new Date();
+    const earnedExpired = data.value.earned_points
+        .filter((p: any) => !p.cancel_id && p.expires_at && new Date(p.expires_at) <= now)
+        .reduce((sum: number, p: any) => sum + Math.max(0, Number(p.points || 0) - Number(p.redeemed_points || 0)), 0);
+    const bonusExpired = data.value.bonus_points
+        .filter((p: any) => !p.cancel_id && p.expires_at && new Date(p.expires_at) <= now)
+        .reduce((sum: number, p: any) => sum + Math.max(0, Number(p.points || 0) - Number(p.redeemed_points || 0)), 0);
+    return earnedExpired + bonusExpired;
+});
 
 // Combine Tier Points + Cancellations
 const combinedTierPoints = computed(() => {
-    const earned = data.value.earned_points.map((p: any) => ({
-        ...p,
-        rowType: 'earned',
-        displayDate: p.date,
-        displayProject: p.category, 
-        displayPoints: p.points,
-        displayExpiresOn: p.expires_at || '',
-        displayDescription: p.description || 'Tier Points earned',
-    }));
+    const now = new Date();
+    const earned = data.value.earned_points.map((p: any) => {
+        let isCancelled = p.cancel_id && p.cancellation;
+        let isExpired = !isCancelled && !!p.expires_at && new Date(p.expires_at) <= now;
+        return {
+            ...p,
+            rowType: isCancelled ? 'completed_cancel' : 'earned',
+            isExpired,
+            displayDate: p.date,
+            displayProject: p.project_data ? `${p.project_data.projectNumber || p.project_data.number || ''} - ${p.project_data.name || p.project_data.title || p.category}` : p.category, 
+            displaySubtitle: p.project_data ? (p.project_data.subtitle || p.project_data.type || '') : '',
+            displayPoints: p.points,
+            displayExpiresOn: p.expires_at || '',
+            displayDescription: p.description || 'Tier Points earned',
+            hasCancellation: !!isCancelled,
+            cancellationData: p.cancellation || null,
+            redemptionsList: buildRedemptionsList(p),
+            sortDate: p.date
+        };
+    });
 
-    const cancels = data.value.cancellations.map((c: any) => ({
-        ...c,
-        rowType: 'cancel',
-        displayDate: '', 
-        displayProject: '', 
-        displayPoints: -c.cancellation_points,
-        displayExpiresOn: '',
-        displayDescription: c.cancellation_reason || 'Cancellation',
-        sortDate: c.date
-    }));
+    const linkedCancelIds = new Set(data.value.earned_points.map((p: any) => p.cancel_id).filter(Boolean));
+    const standaloneCancels = data.value.cancellations
+        .filter((c: any) => !linkedCancelIds.has(c.id))
+        .map((c: any) => ({
+            ...c,
+            rowType: 'cancel',
+            displayDate: c.date, 
+            displayProject: 'System / Generic', 
+            displaySubtitle: '',
+            displayPoints: -c.cancellation_points,
+            displayExpiresOn: '',
+            displayDescription: c.cancellation_reason || 'Cancellation',
+            sortDate: c.date,
+            redemptionsList: []
+        }));
 
-    return [...earned, ...cancels].sort((a, b) => {
-        const dateA = new Date(a.displayDate || a.sortDate || 0).getTime();
-        const dateB = new Date(b.displayDate || b.sortDate || 0).getTime();
-        return dateA - dateB;
+    return [...earned, ...standaloneCancels].sort((a, b) => {
+        const dateA = new Date(a.sortDate || a.displayDate || 0).getTime();
+        const dateB = new Date(b.sortDate || b.displayDate || 0).getTime();
+        return dateB - dateA;
     });
 });
+
+const combinedBonusPoints = computed(() => {
+    const now = new Date();
+    return data.value.bonus_points.map((p: any) => {
+        let isCancelled = p.cancel_id && p.cancellation;
+        let isExpired = !isCancelled && !!p.expires_at && new Date(p.expires_at) <= now;
+        return {
+            ...p,
+            rowType: isCancelled ? 'completed_cancel' : 'bonus',
+            isExpired,
+            hasCancellation: !!isCancelled,
+            cancellationData: p.cancellation || null,
+            redemptionsList: buildRedemptionsList(p)
+        };
+    }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+});
+
+// Normalize redemption history from both RedeemPointsDetails records and the legacy redemption_history JSON column
+const buildRedemptionsList = (p: any) => {
+    const fromDetails = (p.redemptions || []).map((r: any) => ({
+        _key: `detail-${r.id}`,
+        points: r.points,
+        reason: r.redeem_point?.reason ?? 'Redemption',
+        date: r.created_at ? new Date(r.created_at).toISOString().split('T')[0] : '',
+        redeem_id: r.redeem_id,
+    }));
+
+    const existingRedeemIds = new Set(fromDetails.map((r: any) => r.redeem_id).filter(Boolean));
+
+    const fromHistory = (p.redemption_history || [])
+        .filter((h: any) => !existingRedeemIds.has(h.redemption_id))
+        .map((h: any, i: number) => ({
+            _key: `history-${i}`,
+            points: h.points,
+            reason: h.reason ?? 'Redemption',
+            date: h.date ?? '',
+        }));
+
+    return [...fromDetails, ...fromHistory];
+};
 
 // Collapsible UI State
 const isTierOpen = ref(false);
@@ -198,6 +273,11 @@ const formatNumber = (num: number) => {
                         <span class="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1 flex items-center gap-2"><ShieldAlert class="w-3.5 h-3.5 text-destructive"/> Cancelled</span>
                         <span class="font-bold text-2xl text-foreground">{{ formatNumber(cancellationsSum) }}</span>
                     </div>
+                    <div class="bg-muted/50 lg:bg-transparent flex items-center justify-center py-2 lg:py-0 w-full lg:w-16 text-muted-foreground font-light text-xl">-</div>
+                    <div class="p-4 flex-1 flex flex-col justify-center bg-card hover:bg-muted/30 transition-colors">
+                        <span class="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1 flex items-center gap-2"><Clock class="w-3.5 h-3.5 text-orange-500"/> Expired</span>
+                        <span class="font-bold text-2xl text-foreground">{{ formatNumber(expiredPointsSum) }}</span>
+                    </div>
                     <div class="bg-muted/50 lg:bg-transparent flex items-center justify-center py-2 lg:py-0 w-full lg:w-16 text-muted-foreground font-light text-xl">=</div>
                     <div class="p-4 flex-1 flex flex-col justify-center bg-blue-50/50 dark:bg-blue-950/20">
                         <span class="text-xs text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mb-1">Total Points</span>
@@ -272,7 +352,11 @@ const formatNumber = (num: number) => {
                         </div>
                         <div class="flex items-center gap-4">
                             <div @click.stop class="flex space-x-2">
-                                <AddEarnedPoints :gratitudeNumber="gratitudeNumber" @saved="fetchDetails" />
+                                <AddEarnedPoints
+                                    :gratitudeNumber="gratitudeNumber"
+                                    :expireDays="earnedExpireDays"
+                                    @saved="fetchDetails"
+                                />
                             </div>
                             <ChevronDown class="w-5 h-5 text-muted-foreground transition-transform duration-200" :class="{'rotate-180': isTierOpen}" />
                         </div>
@@ -285,31 +369,85 @@ const formatNumber = (num: number) => {
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Effective Date</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Project</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Points</th>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Redeemed</th>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Remaining</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expires On</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-1/3">Description</th>
                                         <th class="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-border bg-card">
-                                    <tr v-for="item in combinedTierPoints" :key="item.rowType + '-' + item.id" class="hover:bg-muted/30 transition-colors">
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-foreground">{{ item.displayDate ? new Date(item.displayDate).toISOString().split('T')[0] : '' }}</td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-foreground/90 font-medium">{{ item.displayProject }}</td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="item.rowType === 'cancel' ? 'text-destructive' : 'text-foreground'">{{ formatNumber(item.displayPoints) }}</td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-foreground/80">{{ item.displayExpiresOn ? new Date(item.displayExpiresOn).toISOString().split('T')[0] : '' }}</td>
-                                        <td class="px-6 py-4 text-sm text-foreground/80">{{ item.displayDescription }}</td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
-                                            <template v-if="item.rowType === 'earned'">
-                                                <Button variant="outline" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Update</Button>
-                                                <Button variant="outline" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950">Cancel</Button>
-                                                <Button variant="destructive" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Delete</Button>
-                                            </template>
-                                            <template v-else>
-                                                <Button variant="destructive" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Delete</Button>
-                                            </template>
-                                        </td>
-                                    </tr>
+                                    <template v-for="item in combinedTierPoints" :key="item.rowType + '-' + item.id">
+                                        <tr class="hover:bg-muted/30 transition-colors" :class="{'bg-red-50/30 dark:bg-red-950/20': item.hasCancellation}">
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-foreground">
+                                                {{ item.displayDate ? new Date(item.displayDate).toISOString().split('T')[0] : '' }}
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4">
+                                                <div class="text-sm text-foreground/90 font-bold">{{ item.displayProject }}</div>
+                                                <div v-if="item.displaySubtitle" class="text-xs text-muted-foreground mt-0.5">{{ item.displaySubtitle }}</div>
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="item.rowType === 'cancel' || item.hasCancellation ? 'text-destructive' : 'text-foreground'">
+                                                {{ formatNumber(item.displayPoints) }}
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-600 dark:text-amber-400">
+                                                <template v-if="item.rowType !== 'cancel'">{{ formatNumber(item.redeemed_points || 0) }}</template>
+                                                <span v-else class="text-muted-foreground">—</span>
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-green-600 dark:text-green-400">
+                                                <template v-if="item.rowType !== 'cancel'">{{ formatNumber((item.points || 0) - (item.redeemed_points || 0)) }}</template>
+                                                <span v-else class="text-muted-foreground">—</span>
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-foreground/80">
+                                                <span v-if="item.displayExpiresOn || item.expires_at">
+                                                    {{ new Date(item.displayExpiresOn || item.expires_at).toISOString().split('T')[0] }}
+                                                    <span v-if="item.expires_at_manual" class="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400 border border-violet-300/50">Manual</span>
+                                                </span>
+                                            </td>
+                                            <td class="px-6 py-4 text-sm text-foreground/80">
+                                                {{ item.displayDescription }}
+                                                <span v-if="item.hasCancellation" class="block text-xs font-bold text-destructive mt-1">CANCELLED: {{ item.cancellationData?.cancellation_reason }}</span>
+                                            </td>
+                                            
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
+                                                <ViewEntryDetails :item="item" />
+                                               <!-- If it's pure earned without cancellation, show actions -->
+                                                <template v-if="item.rowType === 'earned'">
+                                                    <span v-if="item.isExpired" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-300/50">
+                                                        <Clock class="w-3 h-3" /> Expired
+                                                    </span>
+                                                    <UpdateEarnedPoints
+                                                        :gratitudeNumber="gratitudeNumber"
+                                                        :point="item"
+                                                        :expireDays="earnedExpireDays"
+                                                        @saved="fetchDetails"
+                                                    />
+                                                    <template v-if="!item.isExpired">
+                                                        <Button variant="outline" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950">Cancel</Button>
+                                                        <Button variant="destructive" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Delete</Button>
+                                                    </template>
+                                                </template>
+                                                <!-- If it is purely a cancellation row or completed_cancel, lock actions -->
+                                                <template v-else-if="item.rowType === 'cancel'">
+                                                    <Button variant="destructive" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Delete</Button>
+                                                </template>
+                                            </td>
+                                        </tr>
+                                        <!-- Nested Redemption History Row -->
+                                        <tr v-if="item.redemptionsList && item.redemptionsList.length > 0" class="bg-muted/10 border-t-0 border-b border-border shadow-inner">
+                                            <td colspan="8" class="px-8 py-3">
+                                                <div class="flex flex-col gap-1.5 pl-4 border-l-2 border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-2 rounded-r-md">
+                                                    <div v-for="red in item.redemptionsList" :key="red._key" class="text-xs text-muted-foreground flex items-center gap-3">
+                                                        <History class="w-3.5 h-3.5" />
+                                                        <span class="font-bold text-amber-600 dark:text-amber-400">-{{ formatNumber(red.points) }} pts</span>
+                                                        <span>Redeemed for: <strong class="text-foreground/90 uppercase tracking-widest text-[10px] bg-card px-2 py-0.5 rounded border border-border shadow-sm mx-1">{{ red.reason }}</strong></span>
+                                                        <span v-if="red.date">on {{ red.date }}</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
                                     <tr v-if="combinedTierPoints.length === 0">
-                                        <td colspan="6" class="px-6 py-8 text-center text-sm text-muted-foreground">No tier points recorded.</td>
+                                        <td colspan="8" class="px-6 py-8 text-center text-sm text-muted-foreground">No tier points recorded.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -331,7 +469,11 @@ const formatNumber = (num: number) => {
                         </div>
                         <div class="flex items-center gap-4">
                             <div @click.stop class="flex space-x-2">
-                                <AddBonusPoints :gratitudeNumber="gratitudeNumber" @saved="fetchDetails" />
+                                <AddBonusPoints
+                                    :gratitudeNumber="gratitudeNumber"
+                                    :expireDays="bonusExpireDays"
+                                    @saved="fetchDetails"
+                                />
                             </div>
                             <ChevronDown class="w-5 h-5 text-muted-foreground transition-transform duration-200" :class="{'rotate-180': isBonusOpen}" />
                         </div>
@@ -341,25 +483,73 @@ const formatNumber = (num: number) => {
                             <table class="min-w-full divide-y divide-border">
                                 <thead class="bg-muted/30">
                                     <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Effective Date</th>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expires On</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Points</th>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Redeemed</th>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Remaining</th>
                                         <th class="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-border bg-card">
-                                    <tr v-for="point in data.bonus_points" :key="point.id" class="hover:bg-muted/30 transition-colors">
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-foreground">{{ new Date(point.date).toISOString().split('T')[0] }}</td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-foreground/80">{{ point.description || point.category }}</td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-foreground">{{ formatNumber(point.points) }}</td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
-                                            <Button variant="outline" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Update</Button>
-                                            <Button variant="outline" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950">Cancel</Button>
-                                            <Button variant="destructive" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Delete</Button>
-                                        </td>
-                                    </tr>
-                                    <tr v-if="data.bonus_points.length === 0">
-                                        <td colspan="4" class="px-6 py-8 text-center text-sm text-muted-foreground">No bonus points recorded.</td>
+                                    <template v-for="point in combinedBonusPoints" :key="point.id">
+                                        <tr class="hover:bg-muted/30 transition-colors" :class="{'bg-red-50/30 dark:bg-red-950/20': point.hasCancellation}">
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-foreground">
+                                                {{ point.date ? new Date(point.date).toISOString().split('T')[0] : 'N/A' }}
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                <template v-if="point.expires_at">
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                                                        :class="new Date(point.expires_at) < new Date() ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'">
+                                                        {{ new Date(point.expires_at).toISOString().split('T')[0] }}
+                                                    </span>
+                                                    <span v-if="point.expires_at_manual" class="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400 border border-violet-300/50">Manual</span>
+                                                </template>
+                                                <span v-else class="text-muted-foreground text-xs">No Expiry</span>
+                                            </td>
+                                            <td class="px-6 py-4 text-sm text-foreground/80">
+                                                {{ point.description || point.category }}
+                                                <span v-if="point.hasCancellation" class="block text-xs font-bold text-destructive mt-1">CANCELLED: {{ point.cancellationData?.cancellation_reason }}</span>
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="point.hasCancellation ? 'text-destructive' : 'text-foreground'">{{ formatNumber(point.points) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-600 dark:text-amber-400">{{ formatNumber(point.redeemed_points || 0) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-green-600 dark:text-green-400">{{ formatNumber((point.points || 0) - (point.redeemed_points || 0)) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
+                                                <ViewEntryDetails :item="point" />
+                                                <template v-if="point.rowType === 'bonus'">
+                                                    <span v-if="point.isExpired" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-300/50">
+                                                        <Clock class="w-3 h-3" /> Expired
+                                                    </span>
+                                                    <UpdateBonusPoints
+                                                        :gratitudeNumber="gratitudeNumber"
+                                                        :point="point"
+                                                        :expireDays="bonusExpireDays"
+                                                        @saved="fetchDetails"
+                                                    />
+                                                    <template v-if="!point.isExpired">
+                                                        <Button variant="outline" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950">Cancel</Button>
+                                                        <Button variant="destructive" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Delete</Button>
+                                                    </template>
+                                                </template>
+                                            </td>
+                                        </tr>
+                                        <!-- Nested Redemption History Row -->
+                                        <tr v-if="point.redemptionsList && point.redemptionsList.length > 0" class="bg-muted/10 border-t-0 border-b border-border shadow-inner">
+                                            <td colspan="7" class="px-8 py-3">
+                                                <div class="flex flex-col gap-1.5 pl-4 border-l-2 border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-2 rounded-r-md">
+                                                    <div v-for="red in point.redemptionsList" :key="red._key" class="text-xs text-muted-foreground flex items-center gap-3">
+                                                        <History class="w-3.5 h-3.5" />
+                                                        <span class="font-bold text-amber-600 dark:text-amber-400">-{{ formatNumber(red.points) }} pts</span>
+                                                        <span>Redeemed for: <strong class="text-foreground/90 uppercase tracking-widest text-[10px] bg-card px-2 py-0.5 rounded border border-border shadow-sm mx-1">{{ red.reason }}</strong></span>
+                                                        <span v-if="red.date">on {{ red.date }}</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    <tr v-if="combinedBonusPoints.length === 0">
+                                        <td colspan="7" class="px-6 py-8 text-center text-sm text-muted-foreground">No bonus points recorded.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -376,10 +566,19 @@ const formatNumber = (num: number) => {
                             </div>
                             <div>
                                 <h2 class="text-base font-semibold text-foreground tracking-tight">Redeemed Points</h2>
-                                <p class="text-xs text-muted-foreground mt-0.5">Points you have used / redeemed</p>
+                                <p class="text-xs text-muted-foreground mt-0.5">Points used / redeemed &mdash; rate: <strong>{{ data.points_per_dollar }} pts = $1</strong></p>
                             </div>
                         </div>
-                        <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-3">
+                            <div @click.stop>
+                                <AddRedemption
+                                    :gratitudeNumber="gratitudeNumber"
+                                    :usablePoints="usablePoints"
+                                    :pointsPerDollar="data.points_per_dollar"
+                                    :level="data.gratitude?.level || 'Explorer'"
+                                    @saved="fetchDetails"
+                                />
+                            </div>
                             <ChevronDown class="w-5 h-5 text-muted-foreground transition-transform duration-200" :class="{'rotate-180': isRedeemOpen}" />
                         </div>
                     </div>
@@ -391,6 +590,7 @@ const formatNumber = (num: number) => {
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Reason</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Points Used</th>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Value ($)</th>
                                         <th class="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
                                     </tr>
                                 </thead>
@@ -398,14 +598,22 @@ const formatNumber = (num: number) => {
                                     <tr v-for="redemption in data.redemptions" :key="redemption.id" class="hover:bg-muted/30 transition-colors">
                                         <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-foreground">{{ redemption.created_at ? new Date(redemption.created_at).toISOString().split('T')[0] : 'N/A' }}</td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-foreground/80">{{ redemption.reason }}</td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-foreground">{{ formatNumber(redemption.points) }}</td>
+                                        <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-foreground">{{ formatNumber(redemption.points) }} pts</td>
+                                        <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-green-600 dark:text-green-400">
+                                            ${{ redemption.amount > 0 ? Number(redemption.amount).toFixed(2) : (redemption.points / data.points_per_dollar).toFixed(2) }}
+                                        </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
-                                            <Button variant="outline" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Update</Button>
-                                            <Button variant="destructive" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Delete</Button>
+                                            <UpdateRedemption
+                                                :gratitudeNumber="gratitudeNumber"
+                                                :redemption="redemption"
+                                                :pointsPerDollar="data.points_per_dollar"
+                                                @saved="fetchDetails"
+                                            />
+                                            <DeleteRedemption :gratitudeNumber="gratitudeNumber" :redemptionId="redemption.id" @saved="fetchDetails" />
                                         </td>
                                     </tr>
                                     <tr v-if="!data.redemptions || data.redemptions.length === 0">
-                                        <td colspan="4" class="px-6 py-8 text-center text-sm text-muted-foreground">No redemptions recorded.</td>
+                                        <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">No redemptions recorded.</td>
                                     </tr>
                                 </tbody>
                             </table>

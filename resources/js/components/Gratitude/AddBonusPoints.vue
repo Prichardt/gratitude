@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 const props = defineProps({
-    gratitudeNumber: { type: String, required: true }
+    gratitudeNumber: { type: String, required: true },
+    expireDays: { type: Number, default: 730 },
 });
 
 const emit = defineEmits(['saved']);
@@ -49,6 +50,9 @@ const submit = async () => {
                         <Label>Points</Label>
                         <Input type="number" v-model="form.points" required />
                     </div>
+                    <p class="text-xs text-muted-foreground">
+                        Bonus points on this level expire after {{ props.expireDays }} days from the selected date.
+                    </p>
                     <div class="flex justify-end space-x-2 mt-6">
                         <Button type="button" variant="outline" @click="isOpen = false">Cancel</Button>
                         <Button type="submit">Save</Button>
