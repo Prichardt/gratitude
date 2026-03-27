@@ -15,6 +15,7 @@ import AddRedemption from '@/components/Gratitude/AddRedemption.vue';
 import DeleteRedemption from '@/components/Gratitude/DeleteRedemption.vue';
 import UpdateRedemption from '@/components/Gratitude/UpdateRedemption.vue';
 import ViewEntryDetails from '@/components/Gratitude/ViewEntryDetails.vue';
+import ViewRedemptionDetails from '@/components/Gratitude/ViewRedemptionDetails.vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ArrowLeft, ChevronDown, Award, History, Gift, ShieldAlert, Zap, Clock } from 'lucide-vue-next';
@@ -379,34 +380,50 @@ const formatNumber = (num: number) => {
                                 </thead>
                                 <tbody class="divide-y divide-border bg-card">
                                     <template v-for="item in combinedTierPoints" :key="item.rowType + '-' + item.id">
-                                        <tr class="hover:bg-muted/30 transition-colors" :class="{'bg-red-50/30 dark:bg-red-950/20': item.hasCancellation}">
+                                        <tr class="hover:bg-muted/30 transition-colors"
+                                            :class="{
+                                                'bg-red-50/40 dark:bg-red-950/20 border-l-2 border-l-destructive': item.hasCancellation,
+                                                'opacity-60': item.hasCancellation
+                                            }">
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-foreground">
-                                                {{ item.displayDate ? new Date(item.displayDate).toISOString().split('T')[0] : '' }}
+                                                <span :class="{'line-through text-muted-foreground': item.hasCancellation}">
+                                                    {{ item.displayDate ? new Date(item.displayDate).toISOString().split('T')[0] : '' }}
+                                                </span>
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4">
-                                                <div class="text-sm text-foreground/90 font-bold">{{ item.displayProject }}</div>
+                                                <div class="text-sm text-foreground/90 font-bold" :class="{'line-through': item.hasCancellation}">{{ item.displayProject }}</div>
                                                 <div v-if="item.displaySubtitle" class="text-xs text-muted-foreground mt-0.5">{{ item.displaySubtitle }}</div>
                                             </td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="item.rowType === 'cancel' || item.hasCancellation ? 'text-destructive' : 'text-foreground'">
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="item.rowType === 'cancel' || item.hasCancellation ? 'text-destructive line-through' : 'text-foreground'">
                                                 {{ formatNumber(item.displayPoints) }}
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-600 dark:text-amber-400">
                                                 <template v-if="item.rowType !== 'cancel'">{{ formatNumber(item.redeemed_points || 0) }}</template>
                                                 <span v-else class="text-muted-foreground">—</span>
                                             </td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-green-600 dark:text-green-400">
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="item.hasCancellation ? 'text-muted-foreground' : 'text-green-600 dark:text-green-400'">
                                                 <template v-if="item.rowType !== 'cancel'">{{ formatNumber((item.points || 0) - (item.redeemed_points || 0)) }}</template>
                                                 <span v-else class="text-muted-foreground">—</span>
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-foreground/80">
-                                                <span v-if="item.displayExpiresOn || item.expires_at">
+                                                <span v-if="item.displayExpiresOn || item.expires_at" :class="{'line-through text-muted-foreground': item.hasCancellation}">
                                                     {{ new Date(item.displayExpiresOn || item.expires_at).toISOString().split('T')[0] }}
                                                     <span v-if="item.expires_at_manual" class="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400 border border-violet-300/50">Manual</span>
                                                 </span>
                                             </td>
-                                            <td class="px-6 py-4 text-sm text-foreground/80">
-                                                {{ item.displayDescription }}
-                                                <span v-if="item.hasCancellation" class="block text-xs font-bold text-destructive mt-1">CANCELLED: {{ item.cancellationData?.cancellation_reason }}</span>
+                                            <td class="px-6 py-4 text-sm">
+                                                <span :class="item.hasCancellation ? 'text-muted-foreground line-through text-xs' : 'text-foreground/80'">{{ item.displayDescription }}</span>
+                                                <!-- Inline cancellation block for rows with cancel_id -->
+                                                <div v-if="item.hasCancellation" class="mt-1.5 flex items-start gap-1.5 bg-red-50 dark:bg-red-950/30 border border-red-200/60 dark:border-red-800/40 rounded px-2 py-1">
+                                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-destructive text-white shrink-0 mt-0.5">Cancelled</span>
+                                                    <div class="min-w-0">
+                                                        <p class="text-xs font-semibold text-destructive">{{ item.cancellationData?.cancellation_reason }}</p>
+                                                        <p class="text-[10px] text-red-500/70 dark:text-red-400/60 mt-0.5">
+                                                            {{ item.cancellationData?.date ? new Date(item.cancellationData.date).toISOString().split('T')[0] : '' }}
+                                                            <span v-if="item.cancellationData?.cancellation_points" class="ml-1 font-bold">· -{{ formatNumber(item.cancellationData.cancellation_points) }} pts</span>
+                                                        </p>
+                                                    </div>
+                                                </div>
                                             </td>
                                             
                                             <td class="px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
@@ -509,27 +526,48 @@ const formatNumber = (num: number) => {
                                 </thead>
                                 <tbody class="divide-y divide-border bg-card">
                                     <template v-for="point in combinedBonusPoints" :key="point.id">
-                                        <tr class="hover:bg-muted/30 transition-colors" :class="{'bg-red-50/30 dark:bg-red-950/20': point.hasCancellation}">
+                                        <tr class="hover:bg-muted/30 transition-colors"
+                                            :class="{
+                                                'bg-red-50/40 dark:bg-red-950/20 border-l-2 border-l-destructive': point.hasCancellation,
+                                                'opacity-60': point.hasCancellation
+                                            }">
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-foreground">
-                                                {{ point.date ? new Date(point.date).toISOString().split('T')[0] : 'N/A' }}
+                                                <span :class="{'line-through text-muted-foreground': point.hasCancellation}">
+                                                    {{ point.date ? new Date(point.date).toISOString().split('T')[0] : 'N/A' }}
+                                                </span>
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm">
                                                 <template v-if="point.expires_at">
                                                     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
-                                                        :class="new Date(point.expires_at) < new Date() ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'">
+                                                        :class="[
+                                                            new Date(point.expires_at) < new Date() ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+                                                            point.hasCancellation ? 'opacity-50 line-through' : ''
+                                                        ]">
                                                         {{ new Date(point.expires_at).toISOString().split('T')[0] }}
                                                     </span>
                                                     <span v-if="point.expires_at_manual" class="ml-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400 border border-violet-300/50">Manual</span>
                                                 </template>
                                                 <span v-else class="text-muted-foreground text-xs">No Expiry</span>
                                             </td>
-                                            <td class="px-6 py-4 text-sm text-foreground/80">
-                                                {{ point.description || point.category }}
-                                                <span v-if="point.hasCancellation" class="block text-xs font-bold text-destructive mt-1">CANCELLED: {{ point.cancellationData?.cancellation_reason }}</span>
+                                            <td class="px-6 py-4 text-sm">
+                                                <span :class="point.hasCancellation ? 'text-muted-foreground line-through text-xs' : 'text-foreground/80'">
+                                                    {{ point.description || point.category }}
+                                                </span>
+                                                <!-- Inline cancellation block -->
+                                                <div v-if="point.hasCancellation" class="mt-1.5 flex items-start gap-1.5 bg-red-50 dark:bg-red-950/30 border border-red-200/60 dark:border-red-800/40 rounded px-2 py-1">
+                                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-destructive text-white shrink-0 mt-0.5">Cancelled</span>
+                                                    <div class="min-w-0">
+                                                        <p class="text-xs font-semibold text-destructive">{{ point.cancellationData?.cancellation_reason }}</p>
+                                                        <p class="text-[10px] text-red-500/70 dark:text-red-400/60 mt-0.5">
+                                                            {{ point.cancellationData?.date ? new Date(point.cancellationData.date).toISOString().split('T')[0] : '' }}
+                                                            <span v-if="point.cancellationData?.cancellation_points" class="ml-1 font-bold">· -{{ formatNumber(point.cancellationData.cancellation_points) }} pts</span>
+                                                        </p>
+                                                    </div>
+                                                </div>
                                             </td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="point.hasCancellation ? 'text-destructive' : 'text-foreground'">{{ formatNumber(point.points) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="point.hasCancellation ? 'text-destructive line-through' : 'text-foreground'">{{ formatNumber(point.points) }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-600 dark:text-amber-400">{{ formatNumber(point.redeemed_points || 0) }}</td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-green-600 dark:text-green-400">{{ formatNumber((point.points || 0) - (point.redeemed_points || 0)) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="point.hasCancellation ? 'text-muted-foreground' : 'text-green-600 dark:text-green-400'">{{ formatNumber((point.points || 0) - (point.redeemed_points || 0)) }}</td>
                                             <td class=" px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
                                                 <ViewEntryDetails :item="point" />
                                                 <template v-if="point.rowType === 'bonus'">
@@ -628,6 +666,7 @@ const formatNumber = (num: number) => {
                                             ${{ redemption.amount > 0 ? Number(redemption.amount).toFixed(2) : (redemption.points / data.points_per_dollar).toFixed(2) }}
                                         </td>
                                         <td class=" px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
+                                            <ViewRedemptionDetails :redemption="redemption" :pointsPerDollar="data.points_per_dollar" />
                                             <UpdateRedemption
                                                 :gratitudeNumber="gratitudeNumber"
                                                 :redemption="redemption"

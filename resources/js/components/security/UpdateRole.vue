@@ -12,10 +12,12 @@ import {
 import InputError from '@/components/InputError.vue';
 import axios from 'axios';
 
+type Permission = { id: number; name: string; action: string };
+
 const props = defineProps<{
     open: boolean;
     role: { id: number; name: string; permissions: Array<{ name: string }> } | null;
-    permissions: Array<{ id: number; name: string }>;
+    permissions: Record<string, Permission[]>;
 }>();
 
 const emit = defineEmits(['update:open', 'updated']);
@@ -35,7 +37,6 @@ watch(() => props.role, (newRole) => {
 
 const submit = () => {
     if (!props.role) return;
-    
     axios.put(`/internal-api/roles/${props.role.id}`, form.data())
         .then(() => {
             emit('updated');
@@ -49,16 +50,36 @@ const submit = () => {
             }
         });
 };
+
+const toggleGroup = (group: string) => {
+    const groupPerms = (props.permissions[group] || []).map(p => p.name);
+    const allSelected = groupPerms.every(p => form.permissions.includes(p));
+    if (allSelected) {
+        form.permissions = form.permissions.filter(p => !groupPerms.includes(p));
+    } else {
+        const toAdd = groupPerms.filter(p => !form.permissions.includes(p));
+        form.permissions.push(...toAdd);
+    }
+};
+
+const isGroupSelected = (group: string) => {
+    const groupPerms = (props.permissions[group] || []).map(p => p.name);
+    return groupPerms.length > 0 && groupPerms.every(p => form.permissions.includes(p));
+};
+
+const isGroupIndeterminate = (group: string) => {
+    const groupPerms = (props.permissions[group] || []).map(p => p.name);
+    const selected = groupPerms.filter(p => form.permissions.includes(p));
+    return selected.length > 0 && selected.length < groupPerms.length;
+};
 </script>
 
 <template>
   <Dialog :open="open" @update:open="$emit('update:open', $event)">
-    <DialogContent class="sm:max-w-[425px]">
+    <DialogContent class="sm:max-w-[560px]">
       <DialogHeader>
         <DialogTitle>Edit Role</DialogTitle>
-        <DialogDescription>
-          Update role name and permissions.
-        </DialogDescription>
+        <DialogDescription>Update role name and permissions.</DialogDescription>
       </DialogHeader>
 
       <form @submit.prevent="submit" class="space-y-4 py-4">
@@ -75,19 +96,33 @@ const submit = () => {
 
         <div class="space-y-2">
             <label class="text-sm font-medium leading-none">Assign Permissions</label>
-            <div class="grid grid-cols-2 gap-2 border rounded-md p-3 bg-muted/20 max-h-60 overflow-y-auto">
-                <label v-for="permission in permissions" :key="permission.id" class="flex items-center space-x-2 cursor-pointer group">
-                    <input
-                        type="checkbox"
-                        :value="permission.name"
-                        v-model="form.permissions"
-                        class="peer h-4 w-4 shrink-0 rounded-sm border border-primary text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                    <span class="text-sm font-medium group-hover:text-primary transition-colors">
-                        {{ permission.name }}
-                    </span>
-                </label>
-                <div v-if="permissions.length === 0" class="col-span-full text-sm text-muted-foreground italic">
+            <div class="border rounded-md bg-muted/20 max-h-72 overflow-y-auto divide-y divide-border">
+                <div v-for="(perms, group) in permissions" :key="group" class="p-3">
+                    <label class="flex items-center gap-2 cursor-pointer mb-2">
+                        <input
+                            type="checkbox"
+                            :checked="isGroupSelected(group)"
+                            :indeterminate="isGroupIndeterminate(group)"
+                            @change="toggleGroup(group)"
+                            class="h-4 w-4 rounded-sm border border-primary"
+                        />
+                        <span class="text-xs font-bold uppercase tracking-wider text-foreground/70">{{ group }}</span>
+                    </label>
+                    <div class="grid grid-cols-3 gap-1.5 pl-6">
+                        <label v-for="permission in perms" :key="permission.id" class="flex items-center gap-1.5 cursor-pointer group">
+                            <input
+                                type="checkbox"
+                                :value="permission.name"
+                                v-model="form.permissions"
+                                class="h-3.5 w-3.5 rounded-sm border border-primary"
+                            />
+                            <span class="text-xs font-medium capitalize text-foreground/80 group-hover:text-primary transition-colors">
+                                {{ permission.action }}
+                            </span>
+                        </label>
+                    </div>
+                </div>
+                <div v-if="Object.keys(permissions).length === 0" class="p-3 text-sm text-muted-foreground italic">
                     No permissions available.
                 </div>
             </div>

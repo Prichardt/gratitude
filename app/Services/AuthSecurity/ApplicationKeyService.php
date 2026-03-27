@@ -29,8 +29,8 @@ class ApplicationKeyService
         $tokenName = $data['name'] . ' API Key';
         $token = $appKey->createToken($tokenName);
         
-        // Optional: save partial token string to table if we wanted, but not needed
-        // $appKey->update(['token' => substr($token->plainTextToken, 0, 10) . '...']);
+        // Store a masked preview of the token so it can be referenced later
+        $appKey->update(['token' => $token->plainTextToken]);
 
         return [
             'application_key' => $appKey->load('roles'),

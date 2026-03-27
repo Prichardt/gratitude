@@ -3,6 +3,11 @@
 namespace App\Http\Controllers\InternalApi\Gratitude;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Gratitude\CancelPointRequest;
+use App\Http\Requests\Gratitude\StoreBonusPointRequest;
+use App\Http\Requests\Gratitude\StoreEarnedPointRequest;
+use App\Http\Requests\Gratitude\UpdateBonusPointRequest;
+use App\Http\Requests\Gratitude\UpdateEarnedPointRequest;
 use App\Models\Gratitude\BonusPoint;
 use App\Models\Gratitude\Cancellation;
 use App\Models\Gratitude\EarnedPoint;
@@ -10,6 +15,9 @@ use App\Models\Gratitude\Gratitude;
 use App\Models\Gratitude\GratitudeBenefit;
 use App\Models\Gratitude\GratitudeReserve;
 use App\Models\Gratitude\RedeemPoints;
+use App\Services\Gratitude\BonusPointService;
+use App\Services\Gratitude\CancellationService;
+use App\Services\Gratitude\EarnedPointService;
 use App\Services\Gratitude\PointExpiryService;
 use App\Services\Gratitude\GratitudeService;
 use Carbon\Carbon;
@@ -19,14 +27,14 @@ use Illuminate\Support\Facades\Http;
 
 class GratitudeController extends Controller
 {
-    protected $gratitudeService;
-    protected $pointExpiryService;
+    public function __construct(
+        protected GratitudeService $gratitudeService,
+        protected PointExpiryService $pointExpiryService,
+        protected EarnedPointService $earnedPointService,
+        protected BonusPointService $bonusPointService,
+        protected CancellationService $cancellationService,
+    ) {}
 
-    public function __construct(GratitudeService $gratitudeService, PointExpiryService $pointExpiryService)
-    {
-        $this->gratitudeService = $gratitudeService;
-        $this->pointExpiryService = $pointExpiryService;
-    }
     public function import()
     {
         // Added withoutVerifying() to fix the cURL 60 SSL certificate error on local WAMP
@@ -400,7 +408,7 @@ class GratitudeController extends Controller
         $earnedPoints = EarnedPoint::with(['cancellation', 'redemptions.redeemPoint'])->where('gratitudeNumber', $gratitudeNumber)->get();
         $bonusPoints = BonusPoint::with(['cancellation', 'redemptions.redeemPoint'])->where('gratitudeNumber', $gratitudeNumber)->get();
         $cancellations = Cancellation::where('gratitudeNumber', $gratitudeNumber)->get();
-        $redemptions = RedeemPoints::where('gratitudeNumber', $gratitudeNumber)->get();
+        $redemptions = RedeemPoints::with('details')->where('gratitudeNumber', $gratitudeNumber)->get();
 
         $twoYearsAgo = Carbon::today()->subYears(2);
 
@@ -442,206 +450,66 @@ class GratitudeController extends Controller
         return response()->json($data);
     }
 
-    public function apiAddEarned(Request $request, $gratitudeNumber)
+    public function apiAddEarned(StoreEarnedPointRequest $request, $gratitudeNumber)
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
-
-        $request->validate([
-            'date' => 'required|date',
-            'category' => 'required|string|max:255',
-            'points' => 'required|numeric|min:1',
-            'amount' => 'required|numeric|min:0',
-            'description' => 'required|string',
-        ]);
-
-        $usableDate = Carbon::parse($request->date);
-        $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
-
-        $point = EarnedPoint::create([
-            'user_id' => $gratitude->user_id,
-            'gratitudeNumber' => $gratitudeNumber,
-            'date' => $usableDate,
-            'category' => $request->category,
-            'points' => $request->points,
-            'amount' => $request->amount,
-            'description' => $request->description,
-            'status' => 'active',
-            'usable_date' => $usableDate,
-            'expires_at' => $this->pointExpiryService->calculateEarnedExpiry($usableDate, $level),
-        ]);
-
-        GratitudeService::syncAccountBalance($gratitudeNumber);
-
+        $point = $this->earnedPointService->add($gratitude, $request->validated());
         return response()->json(['message' => 'Points added', 'point' => $point]);
     }
 
-    public function apiUpdateEarned(Request $request, $gratitudeNumber, $id)
+    public function apiUpdateEarned(UpdateEarnedPointRequest $request, $gratitudeNumber, $id)
     {
         $point = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
-
-        $request->validate([
-            'date' => 'required|date',
-            'category' => 'required|string|max:255',
-            'points' => 'required|numeric|min:1',
-            'amount' => 'required|numeric|min:0',
-            'description' => 'required|string',
-            'expires_at' => 'nullable|date',
-        ]);
-
-        $usableDate = Carbon::parse($request->date);
-        $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
-        $isManual = $request->filled('expires_at');
-        $expiresAt = $isManual
-            ? Carbon::parse($request->expires_at)
-            : $this->pointExpiryService->calculateEarnedExpiry($usableDate, $level);
-
-        $point->update([
-            'date' => $usableDate,
-            'category' => $request->category,
-            'points' => $request->points,
-            'amount' => $request->amount,
-            'description' => $request->description,
-            'usable_date' => $usableDate,
-            'expires_at' => $expiresAt,
-            'expires_at_manual' => $isManual,
-            'status' => $point->status === 'pending' && $usableDate->isFuture() ? 'pending' : 'active',
-        ]);
-
-        GratitudeService::syncAccountBalance($gratitudeNumber);
-
-        return response()->json(['message' => 'Points updated', 'point' => $point]);
+        $updated = $this->earnedPointService->update($point, $gratitude, $request->validated());
+        return response()->json(['message' => 'Points updated', 'point' => $updated]);
     }
 
-    public function apiAddBonus(Request $request, $gratitudeNumber)
+    public function apiAddBonus(StoreBonusPointRequest $request, $gratitudeNumber)
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
-
-        $request->validate([
-            'date' => 'required|date',
-            'description' => 'required|string',
-            'points' => 'required|numeric|min:1',
-        ]);
-
-        $effectiveDate = Carbon::parse($request->date);
-        $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
-
-        $point = BonusPoint::create([
-            'user_id' => $gratitude->user_id,
-            'gratitudeNumber' => $gratitudeNumber,
-            'date' => $effectiveDate,
-            'description' => $request->description,
-            'points' => $request->points,
-            'expires_at' => $this->pointExpiryService->calculateBonusExpiry($effectiveDate, $level),
-            'status' => true,
-        ]);
-
-        GratitudeService::syncAccountBalance($gratitudeNumber);
-
+        $point = $this->bonusPointService->add($gratitude, $request->validated());
         return response()->json(['message' => 'Bonus points added', 'point' => $point]);
     }
 
-    public function apiUpdateBonus(Request $request, $gratitudeNumber, $id)
+    public function apiUpdateBonus(UpdateBonusPointRequest $request, $gratitudeNumber, $id)
     {
         $point = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
-
-        $request->validate([
-            'date' => 'required|date',
-            'description' => 'required|string',
-            'points' => 'required|numeric|min:1',
-            'expires_at' => 'nullable|date',
-        ]);
-
-        $effectiveDate = Carbon::parse($request->date);
-        $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
-        $isManual = $request->filled('expires_at');
-        $expiresAt = $isManual
-            ? Carbon::parse($request->expires_at)
-            : $this->pointExpiryService->calculateBonusExpiry($effectiveDate, $level);
-
-        $point->update([
-            'date' => $effectiveDate,
-            'description' => $request->description,
-            'points' => $request->points,
-            'expires_at' => $expiresAt,
-            'expires_at_manual' => $isManual,
-            'status' => true,
-        ]);
-
-        GratitudeService::syncAccountBalance($gratitudeNumber);
-
-        return response()->json(['message' => 'Bonus points updated', 'point' => $point]);
+        $updated = $this->bonusPointService->update($point, $gratitude, $request->validated());
+        return response()->json(['message' => 'Bonus points updated', 'point' => $updated]);
     }
 
-    public function apiCancelPoints(Request $request, $gratitudeNumber)
+    public function apiCancelPoints(CancelPointRequest $request, $gratitudeNumber)
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
-
-        $request->validate(['date' => 'required', 'cancellation_reason' => 'required', 'cancellation_points' => 'required|numeric']);
-
-        $cancel = Cancellation::create([
-            'user_id' => $gratitude->user_id,
-            'gratitudeNumber' => $gratitudeNumber,
-            'date' => $request->date,
-            'cancellation_reason' => $request->cancellation_reason,
-            'cancellation_points' => $request->cancellation_points,
-        ]);
-
-        // Let's also mark a specific EarnedPoint as cancelled if passed
-        if ($request->filled('earned_point_id')) {
-            EarnedPoint::where('id', $request->earned_point_id)->update(['cancel_id' => $cancel->id]);
-        }
-        if ($request->filled('bonus_point_id')) {
-            BonusPoint::where('id', $request->bonus_point_id)->update(['cancel_id' => $cancel->id]);
-        }
-
-        GratitudeService::syncAccountBalance($gratitudeNumber);
-
+        $cancel = $this->cancellationService->cancel(
+            $gratitude,
+            $request->validated(),
+            $request->integer('earned_point_id') ?: null,
+            $request->integer('bonus_point_id') ?: null,
+        );
         return response()->json(['message' => 'Points cancelled', 'cancellation' => $cancel]);
     }
 
     public function apiDeleteEarned($gratitudeNumber, $id)
     {
         $point = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
-
-        if ($point->cancel_id) {
-            Cancellation::where('id', $point->cancel_id)->delete();
-        }
-
-        $point->delete();
-
-        GratitudeService::syncAccountBalance($gratitudeNumber);
-
+        $this->earnedPointService->delete($point);
         return response()->json(['message' => 'Earned point deleted']);
     }
 
     public function apiDeleteBonus($gratitudeNumber, $id)
     {
         $point = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
-
-        if ($point->cancel_id) {
-            Cancellation::where('id', $point->cancel_id)->delete();
-        }
-
-        $point->delete();
-
-        GratitudeService::syncAccountBalance($gratitudeNumber);
-
+        $this->bonusPointService->delete($point);
         return response()->json(['message' => 'Bonus point deleted']);
     }
 
     public function apiDeleteCancellation($gratitudeNumber, $id)
     {
         $cancel = Cancellation::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
-
-        EarnedPoint::where('cancel_id', $id)->update(['cancel_id' => null]);
-        BonusPoint::where('cancel_id', $id)->update(['cancel_id' => null]);
-
-        $cancel->delete();
-
-        GratitudeService::syncAccountBalance($gratitudeNumber);
-
+        $this->cancellationService->delete($cancel);
         return response()->json(['message' => 'Cancellation deleted']);
     }
 
@@ -651,15 +519,7 @@ class GratitudeController extends Controller
 
         $request->validate(['date' => 'required', 'points' => 'required|numeric']);
 
-        $cancel = Cancellation::create([
-            'user_id' => $gratitude->user_id,
-            'gratitudeNumber' => $gratitudeNumber,
-            'date' => $request->date,
-            'cancellation_reason' => 'Points Expiration',
-            'cancellation_points' => $request->points,
-        ]);
-
-        GratitudeService::syncAccountBalance($gratitudeNumber);
+        $cancel = $this->cancellationService->expire($gratitude, $request->all());
 
         return response()->json(['message' => 'Points expired', 'cancellation' => $cancel]);
     }

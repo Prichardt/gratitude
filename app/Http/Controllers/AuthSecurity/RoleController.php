@@ -19,14 +19,14 @@ class RoleController extends Controller
     {
         return Inertia::render('AuthSecurity/Roles/Index', [
             'roles' => $this->roleService->getAllRoles(),
-            'permissions' => Permission::all()
+            'permissions' => $this->groupPermissions(Permission::all())
         ]);
     }
 
     public function create()
     {
         return Inertia::render('AuthSecurity/Roles/Create', [
-            'permissions' => Permission::all()
+            'permissions' => $this->groupPermissions(Permission::all())
         ]);
     }
 
@@ -47,7 +47,7 @@ class RoleController extends Controller
         $role->load('permissions');
         return Inertia::render('AuthSecurity/Roles/Edit', [
             'role' => $role,
-            'permissions' => Permission::all()
+            'permissions' => $this->groupPermissions(Permission::all())
         ]);
     }
 
@@ -108,5 +108,17 @@ class RoleController extends Controller
     {
         $this->roleService->deleteRole($role);
         return response()->json(['message' => 'Role deleted'], 204);
+    }
+
+    private function groupPermissions($permissions): array
+    {
+        $grouped = [];
+        foreach ($permissions as $permission) {
+            $parts = explode(':', $permission->name, 2);
+            $group = ucwords(str_replace(['-', '.'], ' ', $parts[0]));
+            $grouped[$group][] = ['id' => $permission->id, 'name' => $permission->name, 'action' => $parts[1] ?? $permission->name];
+        }
+        ksort($grouped);
+        return $grouped;
     }
 }

@@ -9,7 +9,7 @@ import { ref } from 'vue';
 
 defineProps<{
     roles: Array<{ id: number; name: string; permissions: Array<{ name: string }> }>;
-    permissions: Array<{ id: number; name: string }>;
+    permissions: Record<string, Array<{ id: number; name: string; action: string }>>;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [

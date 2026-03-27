@@ -44,7 +44,7 @@ const handleCreated = (response: any) => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <Head title="Application Keys" />
 
-        <div class="p-6 max-w-7xl mx-auto space-y-6">
+        <div class="p-6 space-y-6">
             <div class="flex justify-between items-center">
                 <h1 class="text-2xl font-bold tracking-tight">Application Keys</h1>
                 <button
@@ -81,6 +81,7 @@ const handleCreated = (response: any) => {
                             <tr>
                                 <th scope="col" class="px-6 py-3 font-medium">Name</th>
                                 <th scope="col" class="px-6 py-3 font-medium">URL</th>
+                                <th scope="col" class="px-6 py-3 font-medium">Token</th>
                                 <th scope="col" class="px-6 py-3 font-medium">Status</th>
                                 <th scope="col" class="px-6 py-3 font-medium">Roles</th>
                                 <th scope="col" class="px-6 py-3 font-medium text-right">Actions</th>
@@ -90,6 +91,7 @@ const handleCreated = (response: any) => {
                             <tr v-for="app in application_keys" :key="app.id" class="border-b border-border hover:bg-muted/50 transition-colors">
                                 <td class="px-6 py-4 font-medium">{{ app.name }}</td>
                                 <td class="px-6 py-4 text-muted-foreground">{{ app.url || 'N/A' }}</td>
+                                <td class="px-6 py-4 text-muted-foreground"></td>
                                 <td class="px-6 py-4">
                                     <span 
                                         class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold"

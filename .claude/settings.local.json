@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find c:/wamp64/www/gratitude/app/Http/Requests/ -type f -name *.php)",
+      "Bash(php artisan:*)",
+      "Bash(php -r \":*)",
+      "Bash(cmd /c \"php artisan route:list --path=api/gratitude 2>&1\")",
+      "Bash(cmd /c \"cd C:\\\\wamp64\\\\www\\\\gratitude && php artisan route:list --path=api/gratitude 2>&1\")",
+      "Bash(cmd /c \"cd C:\\\\wamp64\\\\www\\\\gratitude && php artisan route:list --path=api/gratitude\")",
+      "Bash(cmd /c \"cd C:\\\\wamp64\\\\www\\\\gratitude && C:\\\\wamp64\\\\bin\\\\php\\\\php8.2.28\\\\php.exe artisan route:list --path=api/gratitude 2>&1\")",
+      "Bash(cmd /c \"C:\\\\wamp64\\\\bin\\\\php\\\\php8.2.28\\\\php.exe C:\\\\wamp64\\\\www\\\\gratitude\\\\artisan route:list --path=api/gratitude\")",
+      "Bash(powershell -Command \"Set-Location C:\\\\wamp64\\\\www\\\\gratitude; & C:\\\\wamp64\\\\bin\\\\php\\\\php8.2.28\\\\php.exe artisan route:list --path=api/gratitude 2>&1\")",
+      "Bash(/c/wamp64/bin/php/php8.2.29/php.exe artisan:*)",
+      "Bash(/c/wamp64/bin/php/php8.3.28/php.exe artisan:*)"
+    ]
+  }
+}

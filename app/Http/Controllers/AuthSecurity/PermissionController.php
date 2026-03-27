@@ -16,8 +16,18 @@ class PermissionController extends Controller
 
     public function index()
     {
+        $permissions = $this->permissionService->getAllPermissions();
+        $grouped = [];
+        foreach ($permissions as $permission) {
+            $parts = explode(':', $permission->name, 2);
+            $group = ucwords(str_replace(['-', '.'], ' ', $parts[0]));
+            $grouped[$group][] = ['id' => $permission->id, 'name' => $permission->name, 'action' => $parts[1] ?? $permission->name];
+        }
+        ksort($grouped);
+
         return Inertia::render('AuthSecurity/Permissions/Index', [
-            'permissions' => $this->permissionService->getAllPermissions()
+            'grouped_permissions' => $grouped,
+            'permissions' => $permissions,
         ]);
     }
 
