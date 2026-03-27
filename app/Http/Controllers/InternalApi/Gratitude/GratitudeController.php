@@ -275,23 +275,6 @@ class GratitudeController extends Controller
                 }
 
 
-
-                // Reserve Points
-                // if (isset($record['reservePoints']) && is_array($record['reservePoints'])) {
-                //     foreach ($record['reservePoints'] as $res) {
-                //         GratitudeReserve::updateOrCreate(
-                //             ['old_id' => $res['id']],
-                //             [
-                //                 'user_id'         => $res['user_id'] ?? null,
-                //                 'points'          => $res['points'] ?? 0,
-                //                 'reason'          => $res['reason'] ?? null,
-                //                 'date'            => !empty($res['date']) ? Carbon::parse($res['date']) : null,
-                //                 'source_type'     => Gratitude::class,
-                //                 'source_id'       => $gratitude->id,
-                //             ]
-                //         );
-                //     }
-                // }
             }
 
             DB::commit();
@@ -616,6 +599,50 @@ class GratitudeController extends Controller
         GratitudeService::syncAccountBalance($gratitudeNumber);
 
         return response()->json(['message' => 'Points cancelled', 'cancellation' => $cancel]);
+    }
+
+    public function apiDeleteEarned($gratitudeNumber, $id)
+    {
+        $point = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
+
+        if ($point->cancel_id) {
+            Cancellation::where('id', $point->cancel_id)->delete();
+        }
+
+        $point->delete();
+
+        GratitudeService::syncAccountBalance($gratitudeNumber);
+
+        return response()->json(['message' => 'Earned point deleted']);
+    }
+
+    public function apiDeleteBonus($gratitudeNumber, $id)
+    {
+        $point = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
+
+        if ($point->cancel_id) {
+            Cancellation::where('id', $point->cancel_id)->delete();
+        }
+
+        $point->delete();
+
+        GratitudeService::syncAccountBalance($gratitudeNumber);
+
+        return response()->json(['message' => 'Bonus point deleted']);
+    }
+
+    public function apiDeleteCancellation($gratitudeNumber, $id)
+    {
+        $cancel = Cancellation::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
+
+        EarnedPoint::where('cancel_id', $id)->update(['cancel_id' => null]);
+        BonusPoint::where('cancel_id', $id)->update(['cancel_id' => null]);
+
+        $cancel->delete();
+
+        GratitudeService::syncAccountBalance($gratitudeNumber);
+
+        return response()->json(['message' => 'Cancellation deleted']);
     }
 
     public function apiExpirePoints(Request $request, $gratitudeNumber)

@@ -8,15 +8,16 @@ import AddEarnedPoints from '@/components/Gratitude/AddEarnedPoints.vue';
 import AddBonusPoints from '@/components/Gratitude/AddBonusPoints.vue';
 import UpdateEarnedPoints from '@/components/Gratitude/UpdateEarnedPoints.vue';
 import UpdateBonusPoints from '@/components/Gratitude/UpdateBonusPoints.vue';
-import CancelPoints from '@/components/Gratitude/CancelPoints.vue';
-import ExpirePoints from '@/components/Gratitude/ExpirePoints.vue';
+import CancelPointEntry from '@/components/Gratitude/CancelPointEntry.vue';
+import DeletePointEntry from '@/components/Gratitude/DeletePointEntry.vue';
+import DeleteCancellation from '@/components/Gratitude/DeleteCancellation.vue';
 import AddRedemption from '@/components/Gratitude/AddRedemption.vue';
 import DeleteRedemption from '@/components/Gratitude/DeleteRedemption.vue';
 import UpdateRedemption from '@/components/Gratitude/UpdateRedemption.vue';
 import ViewEntryDetails from '@/components/Gratitude/ViewEntryDetails.vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, ChevronDown, ChevronRight, Award, History, Gift, ShieldAlert, Zap, Clock } from 'lucide-vue-next';
+import { ArrowLeft, ChevronDown, Award, History, Gift, ShieldAlert, Zap, Clock } from 'lucide-vue-next';
 
 const props = defineProps({
     gratitudeNumber: {
@@ -408,7 +409,7 @@ const formatNumber = (num: number) => {
                                                 <span v-if="item.hasCancellation" class="block text-xs font-bold text-destructive mt-1">CANCELLED: {{ item.cancellationData?.cancellation_reason }}</span>
                                             </td>
                                             
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
+                                            <td class="px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
                                                 <ViewEntryDetails :item="item" />
                                                <!-- If it's pure earned without cancellation, show actions -->
                                                 <template v-if="item.rowType === 'earned'">
@@ -422,13 +423,27 @@ const formatNumber = (num: number) => {
                                                         @saved="fetchDetails"
                                                     />
                                                     <template v-if="!item.isExpired">
-                                                        <Button variant="outline" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950">Cancel</Button>
-                                                        <Button variant="destructive" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Delete</Button>
+                                                        <CancelPointEntry
+                                                            :gratitudeNumber="gratitudeNumber"
+                                                            :point="item"
+                                                            pointType="earned"
+                                                            @saved="fetchDetails"
+                                                        />
+                                                        <DeletePointEntry
+                                                            :gratitudeNumber="gratitudeNumber"
+                                                            :point="item"
+                                                            pointType="earned"
+                                                            @saved="fetchDetails"
+                                                        />
                                                     </template>
                                                 </template>
                                                 <!-- If it is purely a cancellation row or completed_cancel, lock actions -->
                                                 <template v-else-if="item.rowType === 'cancel'">
-                                                    <Button variant="destructive" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Delete</Button>
+                                                    <DeleteCancellation
+                                                        :gratitudeNumber="gratitudeNumber"
+                                                        :cancellation="item"
+                                                        @saved="fetchDetails"
+                                                    />
                                                 </template>
                                             </td>
                                         </tr>
@@ -515,7 +530,7 @@ const formatNumber = (num: number) => {
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="point.hasCancellation ? 'text-destructive' : 'text-foreground'">{{ formatNumber(point.points) }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-600 dark:text-amber-400">{{ formatNumber(point.redeemed_points || 0) }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-green-600 dark:text-green-400">{{ formatNumber((point.points || 0) - (point.redeemed_points || 0)) }}</td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
+                                            <td class=" px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
                                                 <ViewEntryDetails :item="point" />
                                                 <template v-if="point.rowType === 'bonus'">
                                                     <span v-if="point.isExpired" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-300/50">
@@ -528,8 +543,18 @@ const formatNumber = (num: number) => {
                                                         @saved="fetchDetails"
                                                     />
                                                     <template v-if="!point.isExpired">
-                                                        <Button variant="outline" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950">Cancel</Button>
-                                                        <Button variant="destructive" size="sm" class="h-7 text-[10px] uppercase font-bold tracking-wider px-2">Delete</Button>
+                                                        <CancelPointEntry
+                                                            :gratitudeNumber="gratitudeNumber"
+                                                            :point="point"
+                                                            pointType="bonus"
+                                                            @saved="fetchDetails"
+                                                        />
+                                                        <DeletePointEntry
+                                                            :gratitudeNumber="gratitudeNumber"
+                                                            :point="point"
+                                                            pointType="bonus"
+                                                            @saved="fetchDetails"
+                                                        />
                                                     </template>
                                                 </template>
                                             </td>
@@ -602,7 +627,7 @@ const formatNumber = (num: number) => {
                                         <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-green-600 dark:text-green-400">
                                             ${{ redemption.amount > 0 ? Number(redemption.amount).toFixed(2) : (redemption.points / data.points_per_dollar).toFixed(2) }}
                                         </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
+                                        <td class=" px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
                                             <UpdateRedemption
                                                 :gratitudeNumber="gratitudeNumber"
                                                 :redemption="redemption"

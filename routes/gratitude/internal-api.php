@@ -17,9 +17,12 @@ Route::name('gratitude.')->prefix('gratitude/')
         Route::get('account/show/{gratitudeNumber}', [GratitudeController::class, 'apiShow'])->name('account.show');
         Route::post('{gratitudeNumber}/earned', [GratitudeController::class, 'apiAddEarned'])->name('earned');
         Route::put('{gratitudeNumber}/earned/{id}', [GratitudeController::class, 'apiUpdateEarned'])->name('earned.update');
+        Route::delete('{gratitudeNumber}/earned/{id}', [GratitudeController::class, 'apiDeleteEarned'])->name('earned.destroy');
         Route::post('{gratitudeNumber}/bonus', [GratitudeController::class, 'apiAddBonus'])->name('bonus');
         Route::put('{gratitudeNumber}/bonus/{id}', [GratitudeController::class, 'apiUpdateBonus'])->name('bonus.update');
+        Route::delete('{gratitudeNumber}/bonus/{id}', [GratitudeController::class, 'apiDeleteBonus'])->name('bonus.destroy');
         Route::post('{gratitudeNumber}/cancel', [GratitudeController::class, 'apiCancelPoints'])->name('cancel');
+        Route::delete('{gratitudeNumber}/cancel/{id}', [GratitudeController::class, 'apiDeleteCancellation'])->name('cancel.destroy');
         Route::post('{gratitudeNumber}/expire', [GratitudeController::class, 'apiExpirePoints'])->name('expire');
 
         // Levels CRUD
