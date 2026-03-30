@@ -63,5 +63,7 @@ class DatabaseSeeder extends Seeder
         );
 
         $user->assignRole($superAdminRole);
+
+        $this->call(GratitudeLevelSeeder::class);
     }
 }

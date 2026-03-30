@@ -23,13 +23,9 @@ class ApplicationKeyService
         if (isset($data['roles'])) {
             $appKey->syncRoles($data['roles']);
         }
-        
-        // Generate Sanctum Token
-        // The token model is stored in memory, and the plainTextToken is returned ONLY here
-        $tokenName = $data['name'] . ' API Key';
-        $token = $appKey->createToken($tokenName);
-        
-        // Store a masked preview of the token so it can be referenced later
+
+        $token = $appKey->createToken($data['name'] . ' API Key');
+
         $appKey->update(['token' => $token->plainTextToken]);
 
         return [
@@ -49,15 +45,38 @@ class ApplicationKeyService
         if (isset($data['roles'])) {
             $appKey->syncRoles($data['roles']);
         }
-        
-        return $appKey;
+
+        return $appKey->load('roles');
+    }
+
+    public function regenerateToken(ApplicationKey $appKey): array
+    {
+        // Revoke all existing tokens
+        $appKey->tokens()->delete();
+
+        // Generate a new token
+        $token = $appKey->createToken($appKey->name . ' API Key');
+
+        $appKey->update(['token' => $token->plainTextToken]);
+
+        return [
+            'application_key' => $appKey->load('roles'),
+            'plainTextToken' => $token->plainTextToken
+        ];
+    }
+
+    public function toggleStatus(ApplicationKey $appKey): ApplicationKey
+    {
+        $newStatus = $appKey->status === 'active' ? 'inactive' : 'active';
+        $appKey->update(['status' => $newStatus]);
+
+        return $appKey->load('roles');
     }
 
     public function deleteKey(ApplicationKey $appKey): bool
     {
-        // Also revoke all tokens (optional, but good practice before deleting)
         $appKey->tokens()->delete();
-        
+
         return $appKey->delete();
     }
 }

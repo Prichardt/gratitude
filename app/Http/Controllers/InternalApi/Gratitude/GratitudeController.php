@@ -14,6 +14,7 @@ use App\Models\Gratitude\EarnedPoint;
 use App\Models\Gratitude\Gratitude;
 use App\Models\Gratitude\GratitudeBenefit;
 use App\Models\Gratitude\GratitudeReserve;
+use App\Models\Gratitude\GratitudeLevel;
 use App\Models\Gratitude\RedeemPoints;
 use App\Services\Gratitude\BonusPointService;
 use App\Services\Gratitude\CancellationService;
@@ -382,7 +383,7 @@ class GratitudeController extends Controller
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
 
-        $level = \App\Models\Gratitude\GratitudeLevel::where('name', $gratitude->level)->first();
+        $level = GratitudeLevel::where('name', $gratitude->level)->first();
         $benefits = [];
         if ($level) {
             $benefits = GratitudeBenefit::whereHas('levels', function ($q) use ($level) {

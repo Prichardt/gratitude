@@ -23,13 +23,6 @@ class ApplicationKeyController extends Controller
         ]);
     }
 
-    public function create()
-    {
-        return Inertia::render('AuthSecurity/ApplicationKeys/Create', [
-            'roles' => Role::all()
-        ]);
-    }
-
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -44,15 +37,6 @@ class ApplicationKeyController extends Controller
         return redirect()->route('application-keys.index')
             ->with('success', 'Application Key created successfully.')
             ->with('plainTextToken', $result['plainTextToken']);
-    }
-
-    public function edit(ApplicationKey $application_key)
-    {
-        $application_key->load('roles');
-        return Inertia::render('AuthSecurity/ApplicationKeys/Edit', [
-            'application_key' => $application_key,
-            'roles' => Role::all()
-        ]);
     }
 
     public function update(Request $request, ApplicationKey $application_key)
@@ -74,6 +58,8 @@ class ApplicationKeyController extends Controller
         $this->appKeyService->deleteKey($application_key);
         return redirect()->route('application-keys.index')->with('success', 'Application Key deleted successfully.');
     }
+
+    // Internal API methods
 
     public function apiIndex()
     {
@@ -117,6 +103,27 @@ class ApplicationKeyController extends Controller
         return response()->json([
             'message' => 'Application Key updated successfully.',
             'data' => $updated
+        ]);
+    }
+
+    public function apiToggleStatus(ApplicationKey $application_key)
+    {
+        $updated = $this->appKeyService->toggleStatus($application_key);
+
+        return response()->json([
+            'message' => 'Application Key status updated to ' . $updated->status . '.',
+            'data' => $updated
+        ]);
+    }
+
+    public function apiRegenerateToken(ApplicationKey $application_key)
+    {
+        $result = $this->appKeyService->regenerateToken($application_key);
+
+        return response()->json([
+            'message' => 'Token regenerated successfully.',
+            'data' => $result['application_key'],
+            'plainTextToken' => $result['plainTextToken']
         ]);
     }
 

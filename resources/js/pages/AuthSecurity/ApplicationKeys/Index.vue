@@ -1,27 +1,43 @@
 <script setup lang="ts">
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/app/AppSidebarLayout.vue';
-import type {BreadcrumbItem} from '@/types';
+import type { BreadcrumbItem } from '@/types';
 import CreateApplicationKey from '@/components/security/CreateApplicationKey.vue';
 import UpdateApplicationKey from '@/components/security/UpdateApplicationKey.vue';
+import ViewApplicationKey from '@/components/security/ViewApplicationKey.vue';
+
+type AppKey = {
+    id: number;
+    name: string;
+    url: string;
+    status: string;
+    token: string;
+    roles: Array<{ name: string }>;
+    created_at?: string;
+    updated_at?: string;
+};
 
 defineProps<{
-    application_keys: Array<{ id: number; name: string; url: string; status: string; roles: Array<{ name: string }> }>;
+    application_keys: AppKey[];
     roles: Array<{ id: number; name: string }>;
 }>();
 
 const showCreateModal = ref(false);
 const showUpdateModal = ref(false);
-const selectedKey = ref<any>(null);
+const showViewModal = ref(false);
+const selectedKey = ref<AppKey | null>(null);
 
-const handleEditClick = (appKey: any) => {
+const handleEditClick = (appKey: AppKey) => {
     selectedKey.value = appKey;
     showUpdateModal.value = true;
 };
 
-
+const handleViewClick = (appKey: AppKey) => {
+    selectedKey.value = appKey;
+    showViewModal.value = true;
+};
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Auth & Security', href: '/roles' },
@@ -36,6 +52,10 @@ const handleCreated = (response: any) => {
     if (response?.plainTextToken) {
         modalToken.value = response.plainTextToken;
     }
+    router.reload({ only: ['application_keys'] });
+};
+
+const handleUpdated = () => {
     router.reload({ only: ['application_keys'] });
 };
 </script>
@@ -54,7 +74,7 @@ const handleCreated = (response: any) => {
                     Create Key
                 </button>
             </div>
-            
+
             <div v-if="plainTextToken" class="rounded-md border border-green-200 bg-green-50 p-4 mb-6">
                 <div class="flex">
                     <div class="flex-shrink-0">
@@ -81,21 +101,26 @@ const handleCreated = (response: any) => {
                             <tr>
                                 <th scope="col" class="px-6 py-3 font-medium">Name</th>
                                 <th scope="col" class="px-6 py-3 font-medium">URL</th>
-                                <th scope="col" class="px-6 py-3 font-medium">Token</th>
                                 <th scope="col" class="px-6 py-3 font-medium">Status</th>
                                 <th scope="col" class="px-6 py-3 font-medium">Roles</th>
                                 <th scope="col" class="px-6 py-3 font-medium text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="app in application_keys" :key="app.id" class="border-b border-border hover:bg-muted/50 transition-colors">
+                            <tr
+                                v-for="app in application_keys"
+                                :key="app.id"
+                                class="border-b border-border hover:bg-muted/50 transition-colors"
+                                :class="app.status === 'inactive' ? 'opacity-60' : ''"
+                            >
                                 <td class="px-6 py-4 font-medium">{{ app.name }}</td>
                                 <td class="px-6 py-4 text-muted-foreground">{{ app.url || 'N/A' }}</td>
-                                <td class="px-6 py-4 text-muted-foreground"></td>
                                 <td class="px-6 py-4">
-                                    <span 
+                                    <span
                                         class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold"
-                                        :class="app.status === 'active' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'"
+                                        :class="app.status === 'active'
+                                            ? 'bg-green-100 text-green-800 border-green-200'
+                                            : 'bg-red-100 text-red-800 border-red-200'"
                                     >
                                         {{ app.status }}
                                     </span>
@@ -112,25 +137,23 @@ const handleCreated = (response: any) => {
                                         <span v-if="app.roles.length === 0" class="text-muted-foreground italic text-xs">No roles</span>
                                     </div>
                                 </td>
-                                <td class="px-6 py-4 text-right">
+                                <td class="px-6 py-4 text-right space-x-3">
+                                    <button
+                                        @click="handleViewClick(app)"
+                                        class="text-primary hover:underline text-sm"
+                                    >
+                                        View
+                                    </button>
                                     <button
                                         @click="handleEditClick(app)"
-                                        class="text-primary hover:underline"
+                                        class="text-muted-foreground hover:underline text-sm"
                                     >
                                         Edit
                                     </button>
-                                    <Link
-                                        :href="`/application-keys/${app.id}`"
-                                        method="delete"
-                                        as="button"
-                                        class="ml-4 text-destructive hover:underline"
-                                    >
-                                        Delete
-                                    </Link>
                                 </td>
                             </tr>
                             <tr v-if="application_keys.length === 0">
-                                <td colspan="4" class="px-6 py-4 text-center text-muted-foreground">
+                                <td colspan="5" class="px-6 py-8 text-center text-muted-foreground">
                                     No application keys found.
                                 </td>
                             </tr>
@@ -140,17 +163,23 @@ const handleCreated = (response: any) => {
             </div>
         </div>
 
-        <CreateApplicationKey 
-            v-model:open="showCreateModal" 
-            :roles="roles" 
-            @created="handleCreated" 
+        <CreateApplicationKey
+            v-model:open="showCreateModal"
+            :roles="roles"
+            @created="handleCreated"
         />
 
-        <UpdateApplicationKey 
-            v-model:open="showUpdateModal" 
+        <UpdateApplicationKey
+            v-model:open="showUpdateModal"
             :application_key="selectedKey"
-            :roles="roles" 
-            @updated="handleCreated" 
+            :roles="roles"
+            @updated="handleUpdated"
+        />
+
+        <ViewApplicationKey
+            v-model:open="showViewModal"
+            :application_key="selectedKey"
+            @updated="handleUpdated"
         />
     </AppLayout>
 </template>
