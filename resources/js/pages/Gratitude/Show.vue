@@ -35,6 +35,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const data = ref<any>({
     gratitude: null,
+    guests: [],
     earned_points: [],
     bonus_points: [],
     cancellations: [],
@@ -215,22 +216,20 @@ const formatNumber = (num: number) => {
                 <div class="px-6 flex flex-col xl:flex-row xl:items-center justify-between gap-6">
                     <!-- Guests -->
                     <div class="flex flex-wrap items-center gap-3">
-                        <div class="bg-blue-600/10 border border-blue-600/20 text-blue-700 dark:text-blue-400 px-4 py-1.5 rounded-full flex items-center gap-2 shadow-sm transition-colors hover:bg-blue-600/20">
-                            <span class="text-[0.65rem] uppercase tracking-wider opacity-90 font-bold">Primary</span>
-                            <span class="font-bold text-sm">Brian King</span>
-                        </div>
-                        <div class="bg-emerald-600/10 border border-emerald-600/20 text-emerald-700 dark:text-emerald-400 px-4 py-1.5 rounded-full flex items-center gap-2 shadow-sm transition-colors hover:bg-emerald-600/20">
-                            <span class="text-[0.65rem] uppercase tracking-wider font-bold opacity-90">Secondary</span>
-                            <span class="font-bold text-sm">Sara King</span>
-                        </div>
-                        <div class="bg-emerald-600/10 border border-emerald-600/20 text-emerald-700 dark:text-emerald-400 px-4 py-1.5 rounded-full flex items-center gap-2 shadow-sm transition-colors hover:bg-emerald-600/20">
-                            <span class="text-[0.65rem] uppercase tracking-wider font-bold opacity-90">Secondary</span>
-                            <span class="font-bold text-sm">Brendan King</span>
-                        </div>
-                        <div class="bg-emerald-600/10 border border-emerald-600/20 text-emerald-700 dark:text-emerald-400 px-4 py-1.5 rounded-full flex items-center gap-2 shadow-sm transition-colors hover:bg-emerald-600/20">
-                            <span class="text-[0.65rem] uppercase tracking-wider font-bold opacity-90">Secondary</span>
-                            <span class="font-bold text-sm">Alysa Hansen</span>
-                        </div>
+                        <template v-if="data.guests && data.guests.length">
+                            <div
+                                v-for="guest in data.guests"
+                                :key="guest.guest_id"
+                                :class="guest.gratitude_ownership === 'primary'
+                                    ? 'bg-blue-600/10 border-blue-600/20 text-blue-700 dark:text-blue-400 hover:bg-blue-600/20'
+                                    : 'bg-emerald-600/10 border-emerald-600/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-600/20'"
+                                class="border px-4 py-1.5 rounded-full flex items-center gap-2 shadow-sm transition-colors"
+                            >
+                                <span class="text-[0.65rem] uppercase tracking-wider opacity-90 font-bold">{{ guest.gratitude_ownership }}</span>
+                                <span class="font-bold text-sm">{{ guest.preferred_name || guest.first_name }} {{ guest.last_name }}</span>
+                            </div>
+                        </template>
+                        <span v-else class="text-sm text-muted-foreground italic">No guests found</span>
                     </div>
 
                     <!-- Actions & Level -->

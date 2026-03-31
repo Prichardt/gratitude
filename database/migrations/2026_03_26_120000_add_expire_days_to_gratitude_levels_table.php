@@ -13,7 +13,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('gratitude_levels', function (Blueprint $table) {
-            $table->unsignedInteger('earned_expire_days')->default(730)->after('redeemation_points_per_dollar');
+            $table->unsignedInteger('earned_expire_days')->default(730)->after('redemption_points_per_dollar');
             $table->unsignedInteger('bonus_expire_days')->default(730)->after('earned_expire_days');
         });
 

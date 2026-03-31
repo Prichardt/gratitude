@@ -21,7 +21,7 @@ class GratitudeLevel extends Model
         'min_points',
         'max_points',
         'status',
-        'redeemation_points_per_dollar',
+        'redemption_points_per_dollar',
         'earned_expire_days',
         'bonus_expire_days',
         'stay_active_rules',

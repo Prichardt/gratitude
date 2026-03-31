@@ -36,12 +36,19 @@ class GratitudeController extends Controller
         protected CancellationService $cancellationService,
     ) {}
 
+    private function aivteamHttp(): \Illuminate\Http\Client\PendingRequest
+    {
+        return Http::withoutVerifying()
+            ->withToken(config('services.aivteam.access_token'))
+            ->timeout(600);
+    }
+
     public function import()
     {
         // Added withoutVerifying() to fix the cURL 60 SSL certificate error on local WAMP
-        $getResponse = Http::withoutVerifying()->timeout(600)->get('http://aivteam.local/api/get/graitude-data-all/open/gratitude');
+        $getResponse = $this->aivteamHttp()->get('http://aivteam.local/api/get/graitude-data-all/open/gratitude');
 
-        $getJourneysData = Http::withoutVerifying()->timeout(600)->get('http://aivteam.local/api/get/all/journeys');
+        $getJourneysData = $this->aivteamHttp()->get('http://aivteam.local/api/get/all/journeys');
 
         if (!$getResponse->successful()) {
             return response()->json(['message' => 'Failed to fetch data from remote API', 'status' => $getResponse->status()], 500);
@@ -383,6 +390,12 @@ class GratitudeController extends Controller
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
 
+        // Fetch guest info from aivteam API
+        $guestsResponse = $this->aivteamHttp()->get(
+            config('services.aivteam.base_url') . '/api/gratitude/get/gratitude-by-number/' . $gratitudeNumber
+        );
+        $guests = $guestsResponse->successful() ? $guestsResponse->json() : [];
+
         $level = GratitudeLevel::where('name', $gratitude->level)->first();
         $benefits = [];
         if ($level) {
@@ -436,6 +449,7 @@ class GratitudeController extends Controller
 
         $data = [
             'gratitude' => $gratitude,
+            'guests' => $guests,
             'level_info' => $level,
             'earned_points' => $earnedPoints,
             'bonus_points' => $bonusPoints,
@@ -445,7 +459,7 @@ class GratitudeController extends Controller
             'points_to_next_level' => $pointsToNextLevel,
             'rolling_tier_points' => $rollingTotalActive,
             'level_benefits' => $benefits,
-            'points_per_dollar' => $level ? (float) $level->redeemation_points_per_dollar : 35,
+            'points_per_dollar' => $level ? (float) $level->redemption_points_per_dollar : 35,
         ];
 
         return response()->json($data);

@@ -35,7 +35,7 @@ class GratitudeService
                 }
 
                 $level = GratitudeLevel::where('name', $getGratitude->level)->first();
-                $pointsPerDollar = $level ? (float) $level->redeemation_points_per_dollar : 35;
+                $pointsPerDollar = $level ? (float) $level->redemption_points_per_dollar : 35;
                 $monetaryValue = round($points / $pointsPerDollar, 2);
                 $now = Carbon::now();
 

@@ -1,4 +1,4 @@
-/.phpunit.cache
+/.hupnet.cache
 /bootstrap/ssr
 /node_modules
 /public/build

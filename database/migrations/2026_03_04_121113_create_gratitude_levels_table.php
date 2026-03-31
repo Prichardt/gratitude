@@ -17,7 +17,7 @@ return new class extends Migration
             $table->integer('min_points')->default(0);
             $table->integer('max_points')->nullable();
             $table->boolean('status')->default(true);
-            $table->string('redeemation_points_per_dollar')->default(0);
+            $table->string('redemption_points_per_dollar')->default(0);
             $table->text('stay_active_rules')->nullable();
             $table->json('level_rules')->nullable();
             $table->string('level_image')->nullable();
