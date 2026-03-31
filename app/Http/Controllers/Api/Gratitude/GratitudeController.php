@@ -30,17 +30,9 @@ class GratitudeController extends Controller
 
     public function show(string $gratitudeNumber)
     {
-        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
-        $earned    = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->with(['cancellation', 'redemptions'])->get();
-        $bonus     = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->with(['cancellation', 'redemptions'])->get();
-        $cancels   = Cancellation::where('gratitudeNumber', $gratitudeNumber)->get();
+        $data = $this->gratitudeService->gratitudeDataByNumber($gratitudeNumber);
 
-        return response()->json([
-            'gratitude'   => $gratitude,
-            'earned_points' => $earned,
-            'bonus_points'  => $bonus,
-            'cancellations' => $cancels,
-        ]);
+        return response()->json($data);
     }
 
     // Earned Points

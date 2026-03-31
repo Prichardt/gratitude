@@ -4,6 +4,7 @@ namespace App\Models\Gratitude;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
 
@@ -30,12 +31,24 @@ class GratitudeLevel extends Model
         'level_icon',
     ];
 
+    protected $appends = ['level_image_url', 'level_icon_url'];
+
     protected $casts = [
         'level_rules' => 'array',
         'status' => 'boolean',
         'earned_expire_days' => 'integer',
         'bonus_expire_days' => 'integer',
     ];
+
+    public function getLevelImageUrlAttribute(): ?string
+    {
+        return $this->level_image ? url(Storage::url($this->level_image)) : null;
+    }
+
+    public function getLevelIconUrlAttribute(): ?string
+    {
+        return $this->level_icon ? url(Storage::url($this->level_icon)) : null;
+    }
 
     public function benefits()
     {

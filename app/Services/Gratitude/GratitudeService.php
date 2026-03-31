@@ -5,6 +5,8 @@ namespace App\Services\Gratitude;
 use App\Models\Gratitude\Gratitude;
 use App\Models\Gratitude\EarnedPoint;
 use App\Models\Gratitude\BonusPoint;
+use App\Models\Gratitude\Cancellation;
+use App\Models\Gratitude\RedeemPoints;
 use App\Models\Gratitude\GratitudeLevel;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -20,7 +22,7 @@ class GratitudeService
 
     /**
      * Redeem points from a gratitude account using FIFO expiry logic.
-     * Auto-calculates monetary value from the level's redeemation_points_per_dollar rate.
+     * Auto-calculates monetary value from the level's redemption_points_per_dollar rate.
      */
     public function redeemPoints($gratitude_number, $data, $points)
     {
@@ -261,13 +263,42 @@ class GratitudeService
 
         $now = Carbon::now();
 
-        // Total lifetime points: all uncancelled earned + bonus
-        $earnedTotal = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->whereNull('cancel_id')->sum('points');
-        $bonusTotal = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->whereNull('cancel_id')->sum('points');
-        $totalPoints = $earnedTotal + $bonusTotal;
+        // Earned totals (uncancelled)
+        $totalEarned = (int) EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
+            ->whereNull('cancel_id')
+            ->sum('points');
 
-        // Useable: uncancelled, unexpired, status=true (bit 1), usable_date has passed
-        $earnedUseable = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
+        // Bonus totals (uncancelled)
+        $totalBonus = (int) BonusPoint::where('gratitudeNumber', $gratitudeNumber)
+            ->whereNull('cancel_id')
+            ->sum('points');
+
+        // Cancelled points (from cancellations table)
+        $totalCancelled = (int) Cancellation::where('gratitudeNumber', $gratitudeNumber)
+            ->sum('points');
+
+        // Redeemed points (all approved redemptions)
+        $totalRedeemed = (int) RedeemPoints::where('gratitudeNumber', $gratitudeNumber)
+            ->sum('points');
+
+        // Expired: uncancelled points whose expires_at has passed
+        $earnedExpired = (int) EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
+            ->whereNull('cancel_id')
+            ->where('expires_at', '<=', $now)
+            ->sum(DB::raw('points - redeemed_points'));
+
+        $bonusExpired = (int) BonusPoint::where('gratitudeNumber', $gratitudeNumber)
+            ->whereNull('cancel_id')
+            ->where('expires_at', '<=', $now)
+            ->sum(DB::raw('points - redeemed_points'));
+
+        $totalExpired = max(0, $earnedExpired + $bonusExpired);
+
+        // Total lifetime points: earned + bonus (uncancelled)
+        $totalPoints = $totalEarned + $totalBonus;
+
+        // Useable: uncancelled, active status, unexpired, usable_date passed
+        $earnedUseable = (int) EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
             ->whereNull('cancel_id')
             ->activeStatus()
             ->where(function ($q) use ($now) {
@@ -278,7 +309,7 @@ class GratitudeService
             })
             ->sum(DB::raw('points - redeemed_points'));
 
-        $bonusUseable = BonusPoint::where('gratitudeNumber', $gratitudeNumber)
+        $bonusUseable = (int) BonusPoint::where('gratitudeNumber', $gratitudeNumber)
             ->whereNull('cancel_id')
             ->activeStatus()
             ->where(function ($q) use ($now) {
@@ -289,10 +320,55 @@ class GratitudeService
             })
             ->sum(DB::raw('points - redeemed_points'));
 
-        $gratitude->totalPoints = max(0, $totalPoints);
-        $gratitude->useablePoints = max(0, $earnedUseable + $bonusUseable);
+        $useablePoints   = max(0, $earnedUseable + $bonusUseable);
+        $remainingPoints = max(0, $totalPoints - $totalRedeemed - $totalCancelled - $totalExpired);
+        $nonUseablePoints = max(0, $totalPoints - $useablePoints);
+
+        $gratitude->totalPoints          = max(0, $totalPoints);
+        $gratitude->totalEarnedPoints    = max(0, $totalEarned);
+        $gratitude->totalBonusPoints     = max(0, $totalBonus);
+        $gratitude->totalExpiredPoints   = $totalExpired;
+        $gratitude->totalCancelledPoints = max(0, $totalCancelled);
+        $gratitude->totalRedeemedPoints  = max(0, $totalRedeemed);
+        $gratitude->totalRemainingPoints = $remainingPoints;
+        $gratitude->useablePoints        = $useablePoints;
+        $gratitude->nonUseablePoints     = $nonUseablePoints;
         $gratitude->save();
 
         return $gratitude;
+    }
+
+    public function gratitudeDataByNumber(string $gratitudeNumber): ?array
+    {
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->first();
+
+        if (!$gratitude) {
+            return null;
+        }
+
+        $level = GratitudeLevel::where('name', $gratitude->level)->first();
+
+        $earnedPoints  = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
+            ->with(['cancellation', 'redemptions'])
+            ->get();
+
+        $bonusPoints   = BonusPoint::where('gratitudeNumber', $gratitudeNumber)
+            ->with(['cancellation', 'redemptions'])
+            ->get();
+
+        $cancellations = Cancellation::where('gratitudeNumber', $gratitudeNumber)->get();
+
+        $redemptions   = RedeemPoints::where('gratitudeNumber', $gratitudeNumber)
+            ->with('details')
+            ->get();
+
+        return [
+            'gratitude'          => $gratitude,
+            'level_info'         => $level,
+            'earned_points'      => $earnedPoints,
+            'bonus_points'       => $bonusPoints,
+            'cancellations'      => $cancellations,
+            'redemptions'        => $redemptions,
+        ];
     }
 }

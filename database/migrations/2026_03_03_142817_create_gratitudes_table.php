@@ -19,6 +19,7 @@ return new class extends Migration
             $table->integer('totalEarnedPoints')->nullable();
             $table->integer('totalBonusPoints')->nullable();
             $table->integer('totalExpiredPoints')->nullable();
+            $table->integer('totalCancelledPoints')->nullable();
             $table->integer('totalRedeemedPoints')->nullable();
             $table->integer('totalRemainingPoints')->nullable();
             $table->integer('useablePoints')->nullable();
