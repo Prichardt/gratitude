@@ -8,6 +8,7 @@ use App\Models\Gratitude\BonusPoint;
 use App\Models\Gratitude\Cancellation;
 use App\Models\Gratitude\RedeemPoints;
 use App\Models\Gratitude\GratitudeLevel;
+use App\Services\Gratitude\PointExpiryService;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -15,9 +16,203 @@ use Illuminate\Support\Collection;
 
 class GratitudeService
 {
-    public function __construct()
+    public function __construct(protected PointExpiryService $pointExpiryService)
     {
+    }
 
+    public function import(array $data, array $journeysMap = []): void
+    {
+        foreach ($data as $record) {
+            $gratitude = Gratitude::updateOrCreate(
+                ['old_id' => $record['id']],
+                [
+                    'gratitudeNumber' => $record['gratitudeNumber'] ?? null,
+                    'totalPoints'     => $record['totalPoints'] ?? 0,
+                    'useablePoints'   => $record['useablePoints'] ?? 0,
+                    'level'           => $record['level'] ?? 'Explorer',
+                    'status'          => $record['status'] ?? null,
+                    'statusChange'    => $record['statusChange'] ?? null,
+                    'importStatus'    => $record['importStatus'] ?? 1,
+                    'expires_at'      => !empty($record['expires_at']) ? Carbon::parse($record['expires_at']) : null,
+                    'created_at'      => !empty($record['created_at']) ? Carbon::parse($record['created_at']) : null,
+                    'updated_at'      => !empty($record['updated_at']) ? Carbon::parse($record['updated_at']) : null,
+                ]
+            );
+
+            $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
+
+            // Cancellation Points (processed before earned/bonus so cancel_id can be resolved)
+            if (isset($record['cancellationPoints']) && is_array($record['cancellationPoints'])) {
+                foreach ($record['cancellationPoints'] as $cp) {
+                    $fallback_date = $this->parseFallbackDate($cp);
+
+                    Cancellation::updateOrCreate(
+                        ['old_id' => $cp['id']],
+                        [
+                            'user_id'          => $cp['user_id'] ?? null,
+                            'points'           => $cp['points'] ?? 0,
+                            'reason'           => $cp['reason'] ?? null,
+                            'amount'           => $cp['amount'] ?? 0,
+                            'category'         => $cp['category'] ?? null,
+                            'description'      => $cp['description'] ?? null,
+                            'date'             => $fallback_date,
+                            'gratitudeNumber'  => $cp['gratitudeNumber'] ?? null,
+                            'points_breakdown' => $cp['points_breakdown'] ?? null,
+                            'status'           => $cp['status'] ?? null,
+                            'created_at'       => !empty($cp['created_at']) ? Carbon::parse($cp['created_at']) : null,
+                            'updated_at'       => !empty($cp['updated_at']) ? Carbon::parse($cp['updated_at']) : null,
+                        ]
+                    );
+                }
+            }
+
+            // Earned Points
+            if (isset($record['earnedPoints']) && is_array($record['earnedPoints'])) {
+                foreach ($record['earnedPoints'] as $ep) {
+                    $cancel_id    = $this->resolveCancelId($ep['cancel_id'] ?? null);
+                    $fallback_date = $this->parseFallbackDate($ep);
+
+                    $usable_date   = null;
+                    $journeyToSave = null;
+                    if (!empty($ep['journey_id']) && isset($journeysMap[$ep['journey_id']])) {
+                        $journey       = $journeysMap[$ep['journey_id']];
+                        $journeyToSave = $journey;
+                        if (!empty($journey['endDate'])) {
+                            $parsedDate = Carbon::parse($journey['endDate']);
+                            if ($parsedDate->year > 1970) {
+                                $usable_date = $parsedDate;
+                            }
+                        }
+                    }
+
+                    if (!$usable_date && $fallback_date) {
+                        $usable_date = $fallback_date->copy();
+                    }
+
+                    EarnedPoint::updateOrCreate(
+                        ['old_id' => $ep['id']],
+                        [
+                            'user_id'            => $ep['user_id'] ?? null,
+                            'journey_id'         => $ep['journey_id'] ?? null,
+                            'cancel_id'          => $cancel_id,
+                            'gratitudeNumber'    => $ep['gratitudeNumber'] ?? null,
+                            'points'             => $ep['points'] ?? 0,
+                            'redeemed_points'    => $ep['redeemed_points'] ?? 0,
+                            'redemption_history' => $ep['redemption_history'] ?? null,
+                            'amount'             => $ep['amount'] ?? null,
+                            'date'               => $fallback_date,
+                            'description'        => $ep['description'] ?? null,
+                            'category'           => $ep['category'] ?? null,
+                            'status'             => $this->normalizeImportedEarnedStatus($ep['status'] ?? null, $usable_date),
+                            'usable_date'        => $usable_date,
+                            'expires_at'         => $this->pointExpiryService->calculateEarnedExpiry($usable_date, $level),
+                            'project_data'       => $journeyToSave,
+                            'created_at'         => !empty($ep['created_at']) ? Carbon::parse($ep['created_at']) : null,
+                            'updated_at'         => !empty($ep['updated_at']) ? Carbon::parse($ep['updated_at']) : null,
+                        ]
+                    );
+                }
+            }
+
+            // Bonus Points
+            if (isset($record['bonusPoints']) && is_array($record['bonusPoints'])) {
+                foreach ($record['bonusPoints'] as $bp) {
+                    $cancel_id     = $this->resolveCancelId($bp['cancel_id'] ?? null);
+                    $fallback_date = $this->parseFallbackDate($bp);
+                    $usable_date   = $fallback_date ? $fallback_date->copy() : null;
+
+                    BonusPoint::updateOrCreate(
+                        ['old_id' => $bp['id']],
+                        [
+                            'user_id'            => $bp['user_id'] ?? null,
+                            'journey_id'         => $bp['journey_id'] ?? null,
+                            'cancel_id'          => $cancel_id,
+                            'gratitudeNumber'    => $bp['gratitudeNumber'] ?? null,
+                            'points'             => $bp['points'] ?? 0,
+                            'redeemed_points'    => $bp['redeemed_points'] ?? 0,
+                            'redemption_history' => $bp['redemption_history'] ?? null,
+                            'amount'             => $bp['amount'] ?? null,
+                            'date'               => $fallback_date,
+                            'description'        => $bp['description'] ?? null,
+                            'category'           => $bp['category'] ?? null,
+                            'type'               => $bp['type'] ?? null,
+                            'status'             => $this->normalizeImportedBonusStatus($bp['status'] ?? null),
+                            'expires_at'         => $this->pointExpiryService->calculateBonusExpiry($usable_date, $level),
+                            'created_at'         => !empty($bp['created_at']) ? Carbon::parse($bp['created_at']) : null,
+                            'updated_at'         => !empty($bp['updated_at']) ? Carbon::parse($bp['updated_at']) : null,
+                        ]
+                    );
+                }
+            }
+
+            // Redeem Points
+            if (isset($record['redeemPoints']) && is_array($record['redeemPoints'])) {
+                foreach ($record['redeemPoints'] as $rp) {
+                    $cancel_id = $this->resolveCancelId($rp['cancel_id'] ?? null);
+
+                    RedeemPoints::updateOrCreate(
+                        ['old_id' => $rp['id']],
+                        [
+                            'user_id'         => $rp['user_id'] ?? null,
+                            'journey_id'      => $rp['journey_id'] ?? null,
+                            'cancel_id'       => $cancel_id,
+                            'gratitudeNumber' => $rp['gratitudeNumber'] ?? null,
+                            'points'          => $rp['points'] ?? 0,
+                            'amount'          => $rp['amount'] ?? 0,
+                            'roomStatus'      => $rp['roomStatus'] ?? null,
+                            'reason'          => $rp['description'] ?? 'Imported Redemption',
+                            'status'          => $rp['status'] ?? null,
+                            'created_at'      => !empty($rp['created_at']) ? Carbon::parse($rp['created_at']) : null,
+                            'updated_at'      => !empty($rp['updated_at']) ? Carbon::parse($rp['updated_at']) : null,
+                        ]
+                    );
+                }
+            }
+
+            if ($gratitude->gratitudeNumber) {
+                self::syncAccountBalance($gratitude->gratitudeNumber);
+            }
+        }
+    }
+
+    private function parseFallbackDate(array $row): ?Carbon
+    {
+        foreach (['date', 'created_at'] as $field) {
+            if (!empty($row[$field])) {
+                $parsed = Carbon::parse($row[$field]);
+                if ($parsed->year > 1970) {
+                    return $parsed;
+                }
+            }
+        }
+        return null;
+    }
+
+    private function resolveCancelId(mixed $oldId): ?int
+    {
+        if (!$oldId) {
+            return null;
+        }
+        $cancel = Cancellation::where('old_id', $oldId)->first();
+        return $cancel?->id;
+    }
+
+    protected function normalizeImportedEarnedStatus(mixed $status, ?Carbon $usableDate): string
+    {
+        if (in_array($status, ['expired', false, 0, '0'], true)) {
+            return 'expired';
+        }
+
+        if ($usableDate && $usableDate->isFuture()) {
+            return 'pending';
+        }
+
+        return 'active';
+    }
+
+    protected function normalizeImportedBonusStatus(mixed $status): bool
+    {
+        return !in_array($status, ['expired', false, 0, '0'], true);
     }
 
     /**
@@ -249,7 +444,7 @@ class GratitudeService
 
             DB::commit();
             return true;
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             DB::rollBack();
             return false;
         }
@@ -333,6 +528,8 @@ class GratitudeService
         $gratitude->totalRemainingPoints = $remainingPoints;
         $gratitude->useablePoints        = $useablePoints;
         $gratitude->nonUseablePoints     = $nonUseablePoints;
+        $gratitude->last_activity_at      = Carbon::now();
+        $gratitude->levelHistory = $gratitude->levelHistory ? json_decode($gratitude->levelHistory, true) : [];
         $gratitude->save();
 
         return $gratitude;

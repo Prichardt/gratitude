@@ -25,6 +25,7 @@ return new class extends Migration
             $table->integer('useablePoints')->nullable();
             $table->integer('nonUseablePoints')->nullable();
             $table->string('level')->nullable(); // Explorer, Globetrotter, Jetsetter
+            $table->json('levelHistory')->nullable(); // [{"level":"Explorer","startDate":"2024-01-01","endDate":"2024-02-01"},{"level":"Globetrotter","startDate":"2024-02-02","endDate":null}]
             $table->string('status')->nullable();
             $table->string('statusChange')->nullable(); // upgrade, downgrade
             $table->string('statusChangeReason')->nullable();
