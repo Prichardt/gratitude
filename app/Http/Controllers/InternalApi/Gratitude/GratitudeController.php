@@ -80,36 +80,22 @@ class GratitudeController extends Controller
 
     public function apiIndex()
     {
-        // Admin view returning all gratitudes and benefits
-        $gratitudes = Gratitude::with('user')->get()->map(function ($g) {
-            $pending = EarnedPoint::where('user_id', $g->user_id)->where('status', 'pending')->sum('points');
-            $expired = Cancellation::where('user_id', $g->user_id)->sum('points');
-            return [
-                'id' => $g->id,
-                'gratitudeNumber' => $g->gratitudeNumber,
-                'level' => $g->level,
-                'totalPoints' => $g->totalPoints,
-                'usablePoints' => $g->useablePoints,
-                'pendingPoints' => $pending,
-                'expiredPoints' => $expired,
-                'status' => $g->status,
-                'createdAt' => $g->created_at,
-            ];
-        });
-
-        $benefits = GratitudeBenefit::with('levels')->get()->map(function ($b) {
-            return [
-                'id' => $b->id,
-                'name' => $b->name,
-                'type' => $b->type,
-                'description' => $b->description,
-                'is_active' => $b->is_active ? 'Active' : 'Inactive',
-            ];
-        });
+        $gratitudes = Gratitude::select(
+                'id', 'gratitudeNumber', 'level', 'level_obtained_at',
+                'totalPoints', 'useablePoints', 'totalExpiredPoints',
+                'status', 'is_active', 'last_activity_at', 'created_at', 'updated_at'
+            )
+            ->selectSub(
+                EarnedPoint::selectRaw('COALESCE(SUM(points), 0)')
+                    ->whereColumn('gratitudeNumber', 'gratitudes.gratitudeNumber')
+                    ->where('status', 'pending'),
+                'pending_points'
+            )
+            ->orderBy('updated_at', 'desc')
+            ->get();
 
         return response()->json([
             'points' => $gratitudes,
-            'benefits' => $benefits,
         ]);
     }
 

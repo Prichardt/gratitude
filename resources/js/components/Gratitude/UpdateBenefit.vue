@@ -50,6 +50,11 @@ const openModal = () => {
                         <Input v-model="form.name" required />
                     </div>
                     <div>
+                        <Label>Benefit Key</Label>
+                        <Input v-model="form.benefit_key" placeholder="e.g. journey_payment" class="font-mono" />
+                        <p class="text-xs text-muted-foreground mt-1">Unique programmatic identifier used for feature gating (snake_case).</p>
+                    </div>
+                    <div>
                         <Label>Description</Label>
                         <Input v-model="form.description" />
                     </div>

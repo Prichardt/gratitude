@@ -68,13 +68,13 @@ const bonusPointsSum = computed(() => {
     return data.value.bonus_points.reduce((sum: number, p: any) => sum + Number(p.points || 0), 0);
 });
 const cancellationsSum = computed(() => {
-    return data.value.cancellations.reduce((sum: number, p: any) => sum + Number(p.cancellation_points || 0), 0);
+    return data.value.cancellations.reduce((sum: number, p: any) => sum + Number(p.points || 0), 0);
 });
 const redemptionsSum = computed(() => {
     return data.value.redemptions.reduce((sum: number, p: any) => sum + Number(p.points || 0), 0);
 });
 const totalPoints = computed(() => {
-    return data.value.gratitude?.totalPoints || 0;
+    return Math.max(0, tierPointsSum.value + bonusPointsSum.value - cancellationsSum.value - redemptionsSum.value - expiredPointsSum.value);
 });
 const usablePoints = computed(() => {
     return data.value.gratitude?.useablePoints || 0;
@@ -124,9 +124,9 @@ const combinedTierPoints = computed(() => {
             displayDate: c.date, 
             displayProject: 'System / Generic', 
             displaySubtitle: '',
-            displayPoints: -c.cancellation_points,
+            displayPoints: -c.points,
             displayExpiresOn: '',
-            displayDescription: c.cancellation_reason || 'Cancellation',
+            displayDescription: c.description || 'Cancellation',
             sortDate: c.date,
             redemptionsList: []
         }));
@@ -416,10 +416,10 @@ const formatNumber = (num: number) => {
                                                 <div v-if="item.hasCancellation" class="mt-1.5 flex items-start gap-1.5 bg-red-50 dark:bg-red-950/30 border border-red-200/60 dark:border-red-800/40 rounded px-2 py-1">
                                                     <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-destructive text-white shrink-0 mt-0.5">Cancelled</span>
                                                     <div class="min-w-0">
-                                                        <p class="text-xs font-semibold text-destructive">{{ item.cancellationData?.cancellation_reason }}</p>
+                                                        <p class="text-xs font-semibold text-destructive">{{ item.cancellationData?.description }}</p>
                                                         <p class="text-[10px] text-red-500/70 dark:text-red-400/60 mt-0.5">
                                                             {{ item.cancellationData?.date ? new Date(item.cancellationData.date).toISOString().split('T')[0] : '' }}
-                                                            <span v-if="item.cancellationData?.cancellation_points" class="ml-1 font-bold">· -{{ formatNumber(item.cancellationData.cancellation_points) }} pts</span>
+                                                            <span v-if="item.cancellationData?.points" class="ml-1 font-bold">· -{{ formatNumber(item.cancellationData.points) }} pts</span>
                                                         </p>
                                                     </div>
                                                 </div>

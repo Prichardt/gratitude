@@ -27,7 +27,7 @@ const fetchBenefits = async () => {
 
 const importBenefits = async () => {
     try {
-        const response = await axios.get('/internal-api/gratitude/migrate-benefits/data');
+        await axios.get('/internal-api/gratitude/migrate-benefits/data');
         fetchBenefits();
     } catch (error) {
         console.error("Failed to import benefits", error);
@@ -73,6 +73,7 @@ onMounted(() => {
                     <thead class="bg-muted/50">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Benefit Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Benefit Key</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
@@ -83,6 +84,10 @@ onMounted(() => {
                             <td class="px-6 py-4">
                                 <div class="font-medium text-foreground">{{ benefit.name }}</div>
                                 <div class="text-xs text-muted-foreground truncate max-w-xs" v-if="benefit.description">{{ benefit.description }}</div>
+                            </td>
+                            <td class="whitespace-nowrap px-6 py-4">
+                                <span v-if="benefit.benefit_key" class="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground">{{ benefit.benefit_key }}</span>
+                                <span v-else class="text-muted-foreground/40 text-xs">—</span>
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-muted-foreground capitalize">{{ benefit.type }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">
@@ -99,7 +104,7 @@ onMounted(() => {
                             </td>
                         </tr>
                         <tr v-if="benefits.length === 0">
-                            <td colspan="4" class="px-6 py-4 text-center text-muted-foreground">No base benefits established yet.</td>
+                            <td colspan="5" class="px-6 py-4 text-center text-muted-foreground">No base benefits established yet.</td>
                         </tr>
                     </tbody>
                 </table>

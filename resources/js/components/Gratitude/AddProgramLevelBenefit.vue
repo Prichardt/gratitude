@@ -17,6 +17,7 @@ const mode = ref('new'); // 'new' or 'existing'
 const form = ref({
     existing_id: '',
     name: '',
+    benefit_key: '',
     description: '',
     is_active: true,
     type: 'base',
@@ -32,6 +33,7 @@ const unassignedBenefits = computed(() => {
 const resetForm = () => {
     form.value.existing_id = '';
     form.value.name = '';
+    form.value.benefit_key = '';
     form.value.description = '';
     form.value.is_active = true;
     form.value.type = 'base';
@@ -117,9 +119,14 @@ const submit = async () => {
                                 <Input v-model="form.name" required placeholder="e.g. Priority Support" />
                             </div>
                             <div>
-                                <Label>Description</Label>
-                                <Input v-model="form.description" placeholder="Optional details about this benefit" />
+                                <Label>Benefit Key</Label>
+                                <Input v-model="form.benefit_key" placeholder="e.g. priority_support" class="font-mono" />
+                                <p class="text-xs text-muted-foreground mt-1">Unique snake_case key for feature gating.</p>
                             </div>
+                        </div>
+                        <div>
+                            <Label>Description</Label>
+                            <Input v-model="form.description" placeholder="Optional details about this benefit" />
                         </div>
                         <div class="flex items-center space-x-2 pt-2">
                             <input type="checkbox" v-model="form.is_active" id="base_status" class="rounded border-input text-primary h-4 w-4" />

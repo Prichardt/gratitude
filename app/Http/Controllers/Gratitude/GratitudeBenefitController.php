@@ -26,6 +26,7 @@ class GratitudeBenefitController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'benefit_key' => 'nullable|string|max:100|unique:gratitude_benefits,benefit_key',
             'description' => 'nullable|string',
             'type' => 'nullable|string|max:50',
             'is_active' => 'boolean',
@@ -40,6 +41,7 @@ class GratitudeBenefitController extends Controller
 
         $benefit = GratitudeBenefit::create([
             'name' => $validated['name'],
+            'benefit_key' => $validated['benefit_key'] ?? null,
             'description' => $validated['description'] ?? null,
             'type' => $validated['type'] ?? 'base',
             'is_active' => $validated['is_active'] ?? true,
@@ -72,6 +74,7 @@ class GratitudeBenefitController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'benefit_key' => 'nullable|string|max:100|unique:gratitude_benefits,benefit_key,' . $benefit->id,
             'description' => 'nullable|string',
             'type' => 'required|string|max:50',
             'is_active' => 'boolean',

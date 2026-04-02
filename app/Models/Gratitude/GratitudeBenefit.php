@@ -18,6 +18,7 @@ class GratitudeBenefit extends Model
 
     protected $fillable = [
         'name',
+        'benefit_key',
         'description',
         'type',
         'is_active',

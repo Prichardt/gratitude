@@ -13,6 +13,7 @@ class PointExpiryService
 
     public function resolveLevelForGratitude(?Gratitude $gratitude): ?GratitudeLevel
     {
+        
         if (!$gratitude?->level) {
             return null;
         }

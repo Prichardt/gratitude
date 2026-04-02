@@ -5,129 +5,338 @@ namespace App\Services\Gratitude;
 use App\Models\Gratitude\EarnedPoint;
 use App\Models\Gratitude\BonusPoint;
 use App\Models\Gratitude\Gratitude;
+use App\Models\Gratitude\GratitudeLevel;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class TierService
 {
-    const TIER_EXPLORER = 'Explorer';
-    
+    const TIER_EXPLORER     = 'Explorer';
     const TIER_GLOBETROTTER = 'Globetrotter';
-    const TIER_JETSETTER = 'Jetsetter';
-
-    const BREAKPOINT_GLOBETROTTER = 15001;
-    const BREAKPOINT_JETSETTER = 30001;
+    const TIER_JETSETTER    = 'Jetsetter';
 
     /**
-     * Recalculates the user's tier based on all active tier points earned in the rolling 2-year window.
+     * Recalculate a member's tier based on earned points within the membership interval.
+     *
+     * Rules:
+     *  - Only earned (tier) points drive level changes — bonus points are excluded.
+     *  - The interval starts at level_obtained_at and spans level_interval_years years.
+     *  - Before the interval expires: a member can only be UPGRADED, never downgraded mid-interval.
+     *  - Once the interval expires: the earned points inside that interval are evaluated;
+     *    if they no longer meet the current level's threshold the member is downgraded and
+     *    a fresh interval begins.
+     *  - If systemLevelUpdate = false the level was manually overridden; skip auto-recalc.
+     *  - Jetsetter also requires a minimum number of qualifying journeys (by length).
+     *
+     * @param  int|string  $userId
+     * @param  string      $changedBy  'system' or an admin identifier
+     * @return Gratitude|null
      */
-    public function recalculateTier($userId)
+    public function recalculateTier($gratitudeNumber, string $changedBy = 'system'): ?Gratitude
     {
-        $twoYearsAgo = Carbon::today()->subYears(2);
-
-        // Sum the TOTAL remaining tier points that became usable in the last 2 years (and are still active)
-        $rollingTotalActive = EarnedPoint::where('user_id', $userId)
-            ->activeStatus()
-            ->where('usable_date', '>=', $twoYearsAgo)
-            ->sum(EarnedPoint::raw('points - redeemed_points'));
-
-        // Determine correct level
-        $newLevel = self::TIER_EXPLORER;
-        if ($rollingTotalActive >= self::BREAKPOINT_JETSETTER) {
-            $newLevel = self::TIER_JETSETTER;
-        } elseif ($rollingTotalActive >= self::BREAKPOINT_GLOBETROTTER) {
-            $newLevel = self::TIER_GLOBETROTTER;
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->first();
+        if (!$gratitude) {
+            return null;
         }
 
-        // Get or Create gratitude record for the user
-        $gratitude = Gratitude::firstOrCreate(
-            ['user_id' => $userId],
-            ['level' => self::TIER_EXPLORER, 'useablePoints' => 0, 'totalPoints' => 0]
+        // Respect manual overrides: do not touch the level
+        if (!$gratitude->systemLevelUpdate) {
+            return $gratitude;
+        }
+
+        // Load all active levels ordered highest → lowest
+        $allLevels = GratitudeLevel::where('status', true)
+            ->orderByDesc('min_points')
+            ->get();
+
+        if ($allLevels->isEmpty()) {
+            return $gratitude;
+        }
+
+        $now = Carbon::now();
+
+        // Determine the interval using the current level's config
+        $currentLevelConfig = $allLevels->firstWhere('name', $gratitude->level)
+            ?? $allLevels->sortBy('min_points')->first();
+
+        $intervalYears = $currentLevelConfig->level_interval_years ?? 2;
+
+        // level_obtained_at is null for legacy/imported records — treat as interval-start = now - interval
+        $intervalStart = $gratitude->level_obtained_at
+            ? Carbon::parse($gratitude->level_obtained_at)
+            : $now->copy()->subYears($intervalYears);
+
+        $intervalEnd     = $intervalStart->copy()->addYears($intervalYears);
+        $intervalExpired = $now->greaterThan($intervalEnd);
+
+        // Earned points that became usable within the current interval
+        $earnedInInterval = (int) EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
+            ->activeStatus()
+            ->whereNotNull('usable_date')
+            ->where('usable_date', '>=', $intervalStart)
+            ->where('usable_date', '<=', $now)
+            ->sum(DB::raw('points - redeemed_points'));
+
+        $oldLevel = $gratitude->level ?? self::TIER_EXPLORER;
+
+        if ($intervalExpired) {
+            // Interval has ended: resolve the correct level from scratch and start a new interval
+            $newLevel = $this->resolveLevel($earnedInInterval, $gratitudeNumber, $intervalStart, $intervalEnd, $allLevels);
+            $this->applyLevelChange($gratitude, $oldLevel, $newLevel, $earnedInInterval, $changedBy, $now);
+        } else {
+            // Interval is still active: only upgrade if the member has crossed a higher threshold
+            $qualifiedLevel = $this->resolveLevel($earnedInInterval, $gratitudeNumber, $intervalStart, $now, $allLevels);
+
+            $hierarchy = $this->buildHierarchy($allLevels);
+            $qualifiedRank = $hierarchy[$qualifiedLevel] ?? 1;
+            $currentRank   = $hierarchy[$oldLevel] ?? 1;
+
+            if ($qualifiedRank > $currentRank) {
+                // Upgrade is immediate; the new interval starts from today
+                $this->applyLevelChange($gratitude, $oldLevel, $qualifiedLevel, $earnedInInterval, $changedBy, $now);
+            }
+            // No downgrade while inside the interval
+        }
+
+        return $gratitude->fresh();
+    }
+
+    /**
+     * Force a manual level override. Sets systemLevelUpdate = false so auto-recalc is suppressed.
+     *
+     * @param  Gratitude  $gratitude
+     * @param  string     $newLevel
+     * @param  string     $changedBy   Admin identifier or user description
+     * @param  string|null $reason
+     * @return Gratitude
+     */
+    public function setLevelManually(Gratitude $gratitude, string $newLevel, string $changedBy, ?string $reason = null): Gratitude
+    {
+        $oldLevel = $gratitude->level ?? self::TIER_EXPLORER;
+        $now      = Carbon::now();
+
+        $earnedPoints = (int) EarnedPoint::where('gratitudeNumber', $gratitude->gratitudeNumber)
+            ->activeStatus()
+            ->sum(DB::raw('points - redeemed_points'));
+
+        $history = $this->appendLevelHistory(
+            $gratitude->levelHistory ?? [],
+            $oldLevel,
+            $newLevel,
+            $now,
+            $earnedPoints,
+            $changedBy,
+            $this->determineStatusChange($oldLevel, $newLevel),
+            $reason ?? 'Manual override'
         );
 
-        $oldLevel = $gratitude->level;
-        $statusChange = null;
-
-        if ($oldLevel !== $newLevel) {
-            $statusChange = $this->determineStatusChange($oldLevel, $newLevel);
-            // TODO: Dispatch Event/Email notification indicating tier upgrade/downgrade
-        }
-
-        // Also recalculate the current total usable points across both Bonus and Earned
-        $totalUsableEarned = EarnedPoint::where('user_id', $userId)
-            ->activeStatus()
-            ->sum(EarnedPoint::raw('points - redeemed_points'));
-
-        $totalUsableBonus = BonusPoint::where('user_id', $userId)
-            ->activeStatus()
-            ->sum(BonusPoint::raw('points - redeemed_points'));
-
-        $totalUsable = $totalUsableEarned + $totalUsableBonus;
-
         $gratitude->update([
-            'level' => $newLevel,
-            'useablePoints' => $totalUsable,
-            'statusChange' => $statusChange ?: $gratitude->statusChange
+            'level'              => $newLevel,
+            'levelHistory'       => $history,
+            'level_obtained_at'  => $now,
+            'statusChange'       => $this->determineStatusChange($oldLevel, $newLevel),
+            'statusChangeReason' => $reason ?? 'Manual override',
+            'systemLevelUpdate'  => false,
         ]);
 
-        return $gratitude;
+        return $gratitude->fresh();
     }
 
     /**
-     * Determines if a tier change constitutes an Upgrade or Downgrade
+     * Re-enable automatic level management after a manual override.
      */
-    private function determineStatusChange($oldLevel, $newLevel)
+    public function enableAutoLevelUpdate(Gratitude $gratitude): Gratitude
     {
-        $hierarchy = [
-            self::TIER_EXPLORER => 1,
-            self::TIER_GLOBETROTTER => 2,
-            self::TIER_JETSETTER => 3
-        ];
-
-        $oldRank = $hierarchy[$oldLevel] ?? 1;
-        $newRank = $hierarchy[$newLevel] ?? 1;
-
-        if ($newRank > $oldRank) {
-            return 'upgrade';
-        } elseif ($newRank < $oldRank) {
-            return 'downgrade';
-        }
-
-        return null;
+        $gratitude->update(['systemLevelUpdate' => true]);
+        return $gratitude->fresh();
     }
 
     /**
-     * Flags an account as inactive if the client has not traveled within 2 years and has 0 Bonus Points.
+     * Flags an account as inactive if the member has not traveled in the last 2 years
+     * and has no remaining bonus points.
      */
-    public function checkInactivity($userId)
+    public function checkInactivity($gratitudeNumber): bool
     {
         $twoYearsAgo = Carbon::today()->subYears(2);
 
-        // Check if there are any journeys completed (usable_date is the journey end date) within the last 2 years
-        $recentJourneyCount = EarnedPoint::where('user_id', $userId)
+        $recentJourneyCount = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
             ->whereNotNull('usable_date')
             ->where('usable_date', '>=', $twoYearsAgo)
             ->count();
 
         if ($recentJourneyCount > 0) {
-            // They have traveled recently, not inactive
             return false;
         }
 
-        // Check Bonus Points balance
-        $bonusBalance = BonusPoint::where('user_id', $userId)
+        $bonusBalance = BonusPoint::where('gratitudeNumber', $gratitudeNumber)
             ->activeStatus()
             ->sum(BonusPoint::raw('points - redeemed_points'));
 
         if ($bonusBalance <= 0) {
-            // Mark account inactive
-            $gratitude = Gratitude::where('user_id', $userId)->first();
+            $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->first();
             if ($gratitude) {
                 $gratitude->update(['status' => 'inactive']);
-                // TODO: Dispatch warning email for inactivity
             }
             return true;
         }
 
         return false;
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Walk levels highest→lowest and return the first one the member qualifies for.
+     * Jetsetter also requires minimum qualifying journeys within the interval.
+     */
+    private function resolveLevel(
+        int $earnedPoints,
+        $gratitudeNumber,
+        Carbon $intervalStart,
+        Carbon $intervalEnd,
+        $levels
+    ): string {
+        foreach ($levels->sortByDesc('min_points') as $level) {
+            if ($earnedPoints < (int) $level->min_points) {
+                continue;
+            }
+
+            // Jetsetter travel requirement
+            if ($level->jetsetter_min_journeys && $level->jetsetter_min_journey_days) {
+                if (!$this->meetsJetsetterTravelRequirement($gratitudeNumber, $intervalStart, $intervalEnd, $level)) {
+                    continue;
+                }
+            }
+
+            return $level->name;
+        }
+
+        // Default to the lowest level
+        $lowestLevel = $levels->sortBy('min_points')->first();
+        return $lowestLevel ? $lowestLevel->name : self::TIER_EXPLORER;
+    }
+
+    /**
+     * Count qualifying journeys for Jetsetter within the interval.
+     * A qualifying journey has a duration >= jetsetter_min_journey_days.
+     * Duration = DATEDIFF(usable_date, date) — usable_date is return date, date is departure.
+     */
+    private function meetsJetsetterTravelRequirement($gratitudeNumber, Carbon $from, Carbon $to, $level): bool
+    {
+        $minDays = (int) $level->jetsetter_min_journey_days;
+
+        $count = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
+            ->whereNotNull('usable_date')
+            ->whereNotNull('date')
+            ->where('usable_date', '>=', $from)
+            ->where('usable_date', '<=', $to)
+            ->whereRaw('DATEDIFF(usable_date, date) >= ?', [$minDays])
+            ->count();
+
+        return $count >= (int) $level->jetsetter_min_journeys;
+    }
+
+    /**
+     * Apply a level change (or a no-change interval renewal), persist history, and save.
+     */
+    private function applyLevelChange(
+        Gratitude $gratitude,
+        string $oldLevel,
+        string $newLevel,
+        int $earnedPoints,
+        string $changedBy,
+        Carbon $now
+    ): void {
+        $changeType = $this->determineStatusChange($oldLevel, $newLevel);
+
+        $history = $this->appendLevelHistory(
+            $gratitude->levelHistory ?? [],
+            $oldLevel,
+            $newLevel,
+            $now,
+            $earnedPoints,
+            $changedBy,
+            $changeType
+        );
+
+        $gratitude->update([
+            'level'              => $newLevel,
+            'levelHistory'       => $history,
+            'level_obtained_at'  => $now,
+            'statusChange'       => $changeType,
+            'statusChangeReason' => $this->buildChangeReason($changeType, $oldLevel, $newLevel),
+        ]);
+    }
+
+    /**
+     * Append a structured entry to the level history array.
+     *
+     * History entry shape:
+     * {
+     *   "fromLevel":     "Explorer",
+     *   "toLevel":       "Globetrotter",
+     *   "changeType":    "upgrade",   // upgrade | downgrade | maintained | initial
+     *   "date":          "2026-04-02",
+     *   "earnedPoints":  16500,
+     *   "changedBy":     "system",
+     *   "reason":        "Points threshold met"
+     * }
+     */
+    private function appendLevelHistory(
+        array $history,
+        string $fromLevel,
+        string $toLevel,
+        Carbon $date,
+        int $earnedPoints,
+        string $changedBy,
+        ?string $changeType,
+        ?string $reason = null
+    ): array {
+        $history[] = [
+            'fromLevel'    => $fromLevel,
+            'toLevel'      => $toLevel,
+            'changeType'   => $changeType ?? 'maintained',
+            'date'         => $date->toDateString(),
+            'earnedPoints' => $earnedPoints,
+            'changedBy'    => $changedBy,
+            'reason'       => $reason ?? $this->buildChangeReason($changeType, $fromLevel, $toLevel),
+        ];
+
+        return $history;
+    }
+
+    private function determineStatusChange(string $oldLevel, string $newLevel): ?string
+    {
+        if ($oldLevel === $newLevel) {
+            return 'maintained';
+        }
+
+        $allLevels = GratitudeLevel::where('status', true)->get();
+        $hierarchy = $this->buildHierarchy($allLevels);
+
+        $oldRank = $hierarchy[$oldLevel] ?? 1;
+        $newRank = $hierarchy[$newLevel] ?? 1;
+
+        return $newRank > $oldRank ? 'upgrade' : 'downgrade';
+    }
+
+    private function buildHierarchy($levels): array
+    {
+        $sorted = $levels->sortBy('min_points')->values();
+        $map    = [];
+        foreach ($sorted as $i => $level) {
+            $map[$level->name] = $i + 1;
+        }
+        return $map;
+    }
+
+    private function buildChangeReason(?string $changeType, string $fromLevel, string $toLevel): string
+    {
+        return match ($changeType) {
+            'upgrade'    => "Upgraded from {$fromLevel} to {$toLevel} — points threshold met",
+            'downgrade'  => "Downgraded from {$fromLevel} to {$toLevel} — insufficient points at interval expiry",
+            'maintained' => "Level {$fromLevel} maintained — interval renewed",
+            default      => "Level set to {$toLevel}",
+        };
     }
 }

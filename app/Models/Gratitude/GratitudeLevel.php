@@ -25,8 +25,13 @@ class GratitudeLevel extends Model
         'redemption_points_per_dollar',
         'earned_expire_days',
         'bonus_expire_days',
+        'level_interval_years',
+        'jetsetter_min_journeys',
+        'jetsetter_min_journey_days',
         'stay_active_rules',
         'level_rules',
+        'terms_conditions',
+        'level_terms_conditions',
         'level_image',
         'level_icon',
     ];
@@ -38,6 +43,9 @@ class GratitudeLevel extends Model
         'status' => 'boolean',
         'earned_expire_days' => 'integer',
         'bonus_expire_days' => 'integer',
+        'level_interval_years' => 'integer',
+        'jetsetter_min_journeys' => 'integer',
+        'jetsetter_min_journey_days' => 'integer',
     ];
 
     public function getLevelImageUrlAttribute(): ?string

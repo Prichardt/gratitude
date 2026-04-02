@@ -59,6 +59,10 @@ const submit = async () => {
         <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 text-left">
             <div class="bg-card w-full max-w-3xl p-6 rounded-lg shadow-lg border border-border max-h-[90vh] overflow-y-auto">
                 <h2 class="text-xl font-bold mb-1">Assign "{{ benefit.name }}" to Levels</h2>
+                <div class="flex items-center gap-2 mb-3">
+                    <span v-if="benefit.benefit_key" class="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground">{{ benefit.benefit_key }}</span>
+                    <span v-else class="text-xs text-muted-foreground italic">No benefit key set — edit via Base Benefits.</span>
+                </div>
                 <p class="text-sm text-muted-foreground mb-4">Select which tier levels receive this benefit and specify their exact values.</p>
                 <form @submit.prevent="submit" class="space-y-4">
                     <div class="mt-4">

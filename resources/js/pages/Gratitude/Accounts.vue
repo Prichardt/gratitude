@@ -20,12 +20,14 @@ const columns = [
     { key: 'gratitudeNumber', label: 'Gratitude Number', sortable: true },
     { key: 'level', label: 'Level', sortable: true },
     { key: 'totalPoints', label: 'Total Points', sortable: true, align: 'right' as const },
-    { key: 'usablePoints', label: 'Usable Points', sortable: true, align: 'right' as const },
-    { key: 'pendingPoints', label: 'Pending Points', sortable: true, align: 'right' as const },
-    { key: 'expiredPoints', label: 'Expired Points', sortable: true, align: 'right' as const },
+    { key: 'useablePoints', label: 'Usable Points', sortable: true, align: 'right' as const },
+    { key: 'pending_points', label: 'Pending Points', sortable: true, align: 'right' as const },
+    { key: 'totalExpiredPoints', label: 'Expired Points', sortable: true, align: 'right' as const },
+    { key: 'last_activity_at', label: 'Last Activity', sortable: true },
     { key: 'status', label: 'Status', sortable: true, align: 'center' as const },
     { key: 'actions', label: 'Actions', align: 'center' as const },
 ];
+
 
 const gratitudePoints = ref<any[]>([]);
 const loading = ref(true);
@@ -70,9 +72,29 @@ const getStatusBadge = (status: string) => {
         default: return 'bg-gray-100 text-gray-800';
     }
 };
-    const getAccountRoute = (gratitudeNumber: any): string => {
-        return route('gratitude.account.show', gratitudeNumber) as any as string;
-    };
+
+const getLevelBadge = (level: string) => {
+    switch(level?.toLowerCase()) {
+        case 'jetsetter': return 'bg-amber-100 text-amber-800 border border-amber-300';
+        case 'globetrotter': return 'bg-blue-100 text-blue-800 border border-blue-300';
+        case 'wanderer': return 'bg-gray-100 text-gray-700 border border-gray-300';
+        default: return 'bg-gray-100 text-gray-600 border border-gray-200';
+    }
+};
+
+const formatNumber = (val: any) => {
+    const n = Number(val || 0);
+    return new Intl.NumberFormat('en-US').format(n);
+};
+
+const formatDate = (val: any) => {
+    if (!val) return '—';
+    return new Date(val).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+};
+
+const getAccountRoute = (gratitudeNumber: any): string => {
+    return route('gratitude.account.show', gratitudeNumber) as any as string;
+};
 </script>
 
 <template>
@@ -101,6 +123,26 @@ const getStatusBadge = (status: string) => {
                     :rows="gratitudePoints"
                     :busy="loading"
                 >
+                    <template #cell-level="{ row }">
+                        <span :class="['px-2.5 py-1 text-xs font-semibold rounded-full', getLevelBadge(String(row.level || ''))]">
+                            {{ row.level || '—' }}
+                        </span>
+                    </template>
+                    <template #cell-totalPoints="{ row }">
+                        {{ formatNumber(row.totalPoints) }}
+                    </template>
+                    <template #cell-useablePoints="{ row }">
+                        {{ formatNumber(row.useablePoints) }}
+                    </template>
+                    <template #cell-pending_points="{ row }">
+                        {{ formatNumber(row.pending_points) }}
+                    </template>
+                    <template #cell-totalExpiredPoints="{ row }">
+                        {{ formatNumber(row.totalExpiredPoints) }}
+                    </template>
+                    <template #cell-last_activity_at="{ row }">
+                        {{ formatDate(row.last_activity_at) }}
+                    </template>
                     <template #cell-status="{ row }">
                         <span :class="['px-2.5 py-1 text-xs font-semibold rounded-full', getStatusBadge(String(row.status || ''))]">
                             {{ row.status || 'Unknown' }}

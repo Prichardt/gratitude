@@ -40,4 +40,8 @@ return [
         'base_url' => env('AIVTEAM_BASE_URL', 'http://aivteam.local'),
     ],
 
+    'anthropic' => [
+        'api_key' => env('ANTHROPIC_API_KEY'),
+    ],
+
 ];

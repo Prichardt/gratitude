@@ -53,7 +53,7 @@ const formatNum = (n: any) => new Intl.NumberFormat('en-US').format(Number(n || 
                     <div class="flex items-start gap-3 bg-red-50/80 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
                         <AlertTriangle class="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                         <p class="text-sm text-red-800 dark:text-red-300 font-medium">
-                            Deleting this cancellation will <strong>restore {{ formatNum(cancellation.cancellation_points) }} pts</strong> to the account balance.
+                            Deleting this cancellation will <strong>restore {{ formatNum(cancellation.points) }} pts</strong> to the account balance.
                         </p>
                     </div>
 
@@ -65,12 +65,12 @@ const formatNum = (n: any) => new Intl.NumberFormat('en-US').format(Number(n || 
                         </div>
                         <div class="bg-red-50/70 dark:bg-red-950/20 rounded-lg p-3 border border-red-200/50 dark:border-red-800/50">
                             <p class="text-[10px] text-red-600 dark:text-red-400 font-bold uppercase tracking-wider">Points</p>
-                            <p class="text-lg font-bold text-red-700 dark:text-red-300 mt-0.5">{{ formatNum(cancellation.cancellation_points) }} pts</p>
+                            <p class="text-lg font-bold text-red-700 dark:text-red-300 mt-0.5">{{ formatNum(cancellation.points) }} pts</p>
                         </div>
                     </div>
-                    <div v-if="cancellation.cancellation_reason" class="bg-muted/30 rounded-lg p-3 border border-border/40">
+                    <div v-if="cancellation.description" class="bg-muted/30 rounded-lg p-3 border border-border/40">
                         <p class="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Reason</p>
-                        <p class="text-sm mt-0.5">{{ cancellation.cancellation_reason }}</p>
+                        <p class="text-sm mt-0.5">{{ cancellation.description }}</p>
                     </div>
 
                     <!-- Actions -->

@@ -9,6 +9,8 @@ use App\Models\Gratitude\Cancellation;
 use App\Models\Gratitude\RedeemPoints;
 use App\Models\Gratitude\GratitudeLevel;
 use App\Services\Gratitude\PointExpiryService;
+use App\Services\Gratitude\TierService;
+use App\Services\Gratitude\GratitudeBenefitsService;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
@@ -231,6 +233,12 @@ class GratitudeService
                     return false;
                 }
 
+                // Benefit gate: verify the member's level allows this redemption type
+                $redemptionType = $data['redemption_type'] ?? null;
+                if ($redemptionType && !(new GratitudeBenefitsService())->levelHasBenefit($getGratitude->level, $redemptionType)) {
+                    return ['error' => "Your {$getGratitude->level} membership does not include the '{$redemptionType}' benefit."];
+                }
+
                 $level = GratitudeLevel::where('name', $getGratitude->level)->first();
                 $pointsPerDollar = $level ? (float) $level->redemption_points_per_dollar : 35;
                 $monetaryValue = round($points / $pointsPerDollar, 2);
@@ -247,7 +255,7 @@ class GratitudeService
                 }
 
                 $redemption = \App\Models\Gratitude\RedeemPoints::create([
-                    'user_id' => 5,
+                    'user_id' => $data['user_id'] ?? null,
                     'gratitudeNumber' => $gratitude_number,
                     'points' => $points,
                     'amount' => $data['amount'] ?? $monetaryValue,
@@ -296,7 +304,7 @@ class GratitudeService
                     $segment->redeemed_points += $toDeduct;
 
                     \App\Models\Gratitude\RedeemPointsDetails::create([
-                        'user_id' => $getGratitude->user_id,
+                        'user_id' => $data['user_id'] ?? null,
                         'redeem_id' => $redemption->id,
                         'source_id' => $segment->id,
                         'source_type' => get_class($segment),
@@ -460,12 +468,10 @@ class GratitudeService
 
         // Earned totals (uncancelled)
         $totalEarned = (int) EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
-            ->whereNull('cancel_id')
             ->sum('points');
 
         // Bonus totals (uncancelled)
         $totalBonus = (int) BonusPoint::where('gratitudeNumber', $gratitudeNumber)
-            ->whereNull('cancel_id')
             ->sum('points');
 
         // Cancelled points (from cancellations table)
@@ -489,7 +495,7 @@ class GratitudeService
 
         $totalExpired = max(0, $earnedExpired + $bonusExpired);
 
-        // Total lifetime points: earned + bonus (uncancelled)
+        // Total lifetime points: earned + bonus 
         $totalPoints = $totalEarned + $totalBonus;
 
         // Useable: uncancelled, active status, unexpired, usable_date passed
@@ -528,11 +534,15 @@ class GratitudeService
         $gratitude->totalRemainingPoints = $remainingPoints;
         $gratitude->useablePoints        = $useablePoints;
         $gratitude->nonUseablePoints     = $nonUseablePoints;
-        $gratitude->last_activity_at      = Carbon::now();
-        $gratitude->levelHistory = $gratitude->levelHistory ? json_decode($gratitude->levelHistory, true) : [];
+        $gratitude->last_activity_at     = Carbon::now();
         $gratitude->save();
 
-        return $gratitude;
+        // Recalculate tier from earned points — skipped when systemLevelUpdate = false (manual override)
+        if ($gratitude->gratitudeNumber && $gratitude->systemLevelUpdate) {
+            (new TierService())->recalculateTier($gratitude->gratitudeNumber);
+        }
+
+        return $gratitude->fresh();
     }
 
     public function gratitudeDataByNumber(string $gratitudeNumber): ?array

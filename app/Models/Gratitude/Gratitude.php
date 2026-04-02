@@ -23,15 +23,22 @@ class Gratitude extends Model
         'totalPoints',
         'useablePoints',
         'level',
+        'levelHistory',
+        'level_obtained_at',
         'status',
         'statusChange',
+        'statusChangeReason',
+        'systemLevelUpdate',
         'importStatus',
-        'expires_at'
+        'expires_at',
     ];
 
     protected $casts = [
         'importStatus' => 'boolean',
+        'systemLevelUpdate' => 'boolean',
         'expires_at' => 'datetime',
+        'level_obtained_at' => 'datetime',
+        'levelHistory' => 'array',
     ];
 
     public function user()

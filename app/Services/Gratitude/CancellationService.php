@@ -13,11 +13,11 @@ class CancellationService
     public function cancel(Gratitude $gratitude, array $data, ?int $earnedPointId = null, ?int $bonusPointId = null): Cancellation
     {
         $cancel = Cancellation::create([
-            'user_id'              => $gratitude->user_id,
-            'gratitudeNumber'      => $gratitude->gratitudeNumber,
-            'date'                 => $data['date'],
-            'cancellation_reason'  => $data['cancellation_reason'],
-            'cancellation_points'  => $data['cancellation_points'],
+            'user_id'         => $gratitude->user_id,
+            'gratitudeNumber' => $gratitude->gratitudeNumber,
+            'date'            => $data['date'],
+            'description'     => $data['cancellation_reason'],
+            'points'          => $data['cancellation_points'],
         ]);
 
         if ($earnedPointId) {
@@ -36,11 +36,11 @@ class CancellationService
     public function expire(Gratitude $gratitude, array $data): Cancellation
     {
         $cancel = Cancellation::create([
-            'user_id'              => $gratitude->user_id,
-            'gratitudeNumber'      => $gratitude->gratitudeNumber,
-            'date'                 => $data['date'],
-            'cancellation_reason'  => 'Points Expiration',
-            'cancellation_points'  => $data['points'],
+            'user_id'         => $gratitude->user_id,
+            'gratitudeNumber' => $gratitude->gratitudeNumber,
+            'date'            => $data['date'],
+            'description'     => 'Points Expiration',
+            'points'          => $data['points'],
         ]);
 
         GratitudeService::syncAccountBalance($gratitude->gratitudeNumber);

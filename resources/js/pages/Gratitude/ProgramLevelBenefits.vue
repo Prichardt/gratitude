@@ -89,6 +89,7 @@ onMounted(() => {
                     <template #cell-benefit="{ row }">
                         <div class="font-medium text-foreground">{{ (row as any).name }}</div>
                         <div class="text-xs text-muted-foreground truncate max-w-xs" v-if="(row as any).description">{{ (row as any).description }}</div>
+                        <span v-if="(row as any).benefit_key" class="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground mt-0.5">{{ (row as any).benefit_key }}</span>
                     </template>
 
                     <!-- Dynamic slots for each level mapped to its pivot data -->

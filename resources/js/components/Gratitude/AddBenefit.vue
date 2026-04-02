@@ -9,6 +9,7 @@ const emit = defineEmits(['saved']);
 const isOpen = ref(false);
 const form = ref({
     name: '',
+    benefit_key: '',
     description: '',
     type: 'fixed',
     is_active: true,
@@ -18,7 +19,7 @@ const submit = async () => {
     try {
         await axios.post('/internal-api/gratitude/benefits', form.value);
         isOpen.value = false;
-        form.value = { name: '', description: '', type: 'fixed', is_active: true };
+        form.value = { name: '', benefit_key: '', description: '', type: 'fixed', is_active: true };
         emit('saved');
     } catch (error) {
         console.error('Error saving benefit', error);
@@ -41,6 +42,11 @@ const openModal = () => {
                     <div>
                         <Label>Name</Label>
                         <Input v-model="form.name" required />
+                    </div>
+                    <div>
+                        <Label>Benefit Key</Label>
+                        <Input v-model="form.benefit_key" placeholder="e.g. journey_payment" class="font-mono" />
+                        <p class="text-xs text-muted-foreground mt-1">Unique programmatic identifier used for feature gating (snake_case).</p>
                     </div>
                     <div>
                         <Label>Description</Label>
