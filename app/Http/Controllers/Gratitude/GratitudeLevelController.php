@@ -21,7 +21,7 @@ class GratitudeLevelController extends Controller
             'name' => 'required|string|max:255',
             'min_points' => 'required|numeric|min:0',
             'max_points' => 'nullable|numeric|gte:min_points',
-            'redeemation_points_per_dollar' => 'nullable|numeric|min:1',
+            'redemption_points_per_dollar' => 'nullable|numeric|min:1',
             'earned_expire_days' => 'nullable|integer|min:1',
             'bonus_expire_days' => 'nullable|integer|min:1',
             'level_rules' => 'nullable|string', // JSON string from FormData
@@ -31,7 +31,7 @@ class GratitudeLevelController extends Controller
 
         $data = $request->only('name', 'min_points', 'max_points', 'earned_expire_days', 'bonus_expire_days');
         $data['status'] = filter_var($request->input('status', true), FILTER_VALIDATE_BOOLEAN);
-        $data['redeemation_points_per_dollar'] = $request->input('redeemation_points_per_dollar', 35);
+        $data['redemption_points_per_dollar'] = $request->input('redemption_points_per_dollar', 35);
         $data['earned_expire_days'] = (int) $request->input('earned_expire_days', 730);
         $data['bonus_expire_days'] = (int) $request->input('bonus_expire_days', 730);
 
@@ -58,7 +58,7 @@ class GratitudeLevelController extends Controller
             'name' => 'required|string|max:255',
             'min_points' => 'required|numeric|min:0',
             'max_points' => 'nullable|numeric|gte:min_points',
-            'redeemation_points_per_dollar' => 'nullable|numeric|min:1',
+            'redemption_points_per_dollar' => 'nullable|numeric|min:1',
             'earned_expire_days' => 'nullable|integer|min:1',
             'bonus_expire_days' => 'nullable|integer|min:1',
             'level_rules' => 'nullable|string',
@@ -69,14 +69,17 @@ class GratitudeLevelController extends Controller
         $data = $request->only('name', 'min_points', 'max_points', 'earned_expire_days', 'bonus_expire_days');
         // Handle vue sending boolean as string "true" / "false" in FormData
         $data['status'] = filter_var($request->input('status', true), FILTER_VALIDATE_BOOLEAN);
-        if ($request->filled('redeemation_points_per_dollar')) {
-            $data['redeemation_points_per_dollar'] = $request->input('redeemation_points_per_dollar');
+        if ($request->filled('redemption_points_per_dollar')) {
+            $data['redemption_points_per_dollar'] = $request->input('redemption_points_per_dollar');
         }
         $data['earned_expire_days'] = (int) $request->input('earned_expire_days', $level->earned_expire_days ?: 730);
         $data['bonus_expire_days'] = (int) $request->input('bonus_expire_days', $level->bonus_expire_days ?: 730);
 
-        if ($request->filled('level_rules')) {
-            $data['level_rules'] = json_decode($request->input('level_rules'), true);
+        if ($request->has('level_rules')) {
+            $rawRules = $request->input('level_rules');
+            $data['level_rules'] = ($rawRules !== '' && $rawRules !== null)
+                ? json_decode($rawRules, true)
+                : null;
         }
 
         if ($request->hasFile('level_image')) {

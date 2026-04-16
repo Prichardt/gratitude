@@ -21,13 +21,14 @@ class PointExpiryService
         return GratitudeLevel::where('name', $gratitude->level)->first();
     }
 
-    public function resolveLevelForUserId(?int $userId): ?GratitudeLevel
+    // Gratitudes have no user_id column — look up by gratitudeNumber instead.
+    public function resolveLevelForGratitudeNumber(?string $gratitudeNumber): ?GratitudeLevel
     {
-        if (!$userId) {
+        if (!$gratitudeNumber) {
             return null;
         }
 
-        $gratitude = Gratitude::where('user_id', $userId)->first();
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->first();
 
         return $this->resolveLevelForGratitude($gratitude);
     }

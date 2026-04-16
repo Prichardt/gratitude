@@ -187,42 +187,59 @@ class GratitudeController extends Controller
         $cancellations = Cancellation::where('gratitudeNumber', $gratitudeNumber)->get();
         $redemptions = RedeemPoints::with('details')->where('gratitudeNumber', $gratitudeNumber)->get();
 
-        $twoYearsAgo = Carbon::today()->subYears(2);
+        // Rolling 2-year evaluation window (mirrors TierService logic exactly)
+        $intervalYears = $level ? (int) ($level->level_interval_years ?? 2) : 2;
+        $now           = Carbon::now();
 
-        // Sum the TOTAL remaining tier points that became usable in the last 2 years
-        $rollingTotalActive = EarnedPoint::where('user_id', $gratitude->user_id)
+        $intervalStart = $gratitude->level_obtained_at
+            ? Carbon::parse($gratitude->level_obtained_at)
+            : $now->copy()->subYears($intervalYears);
+
+        $intervalEnd     = $intervalStart->copy()->addYears($intervalYears);
+        $intervalExpired = $now->greaterThan($intervalEnd);
+        $evalStart       = $intervalExpired ? $now->copy()->subYears($intervalYears) : $intervalStart;
+
+        // Net earned (tier) points usable within the evaluation window
+        $rollingTotalActive = (int) EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
             ->activeStatus()
-            ->where(function ($query) use ($twoYearsAgo) {
-                // If the table doesn't have usable_date, fallback to date or created_at
-                $query->where('date', '>=', $twoYearsAgo)
-                    ->orWhere('created_at', '>=', $twoYearsAgo);
-            })
-            ->sum(EarnedPoint::raw('points - redeemed_points'));
+            ->whereNull('cancel_id')
+            ->whereNotNull('usable_date')
+            ->where('usable_date', '>=', $evalStart)
+            ->where('usable_date', '<=', $now)
+            ->sum(DB::raw('points - redeemed_points'));
+
+        // Determine next level dynamically from the levels table (ordered lowest → highest).
+        $allLevels = GratitudeLevel::where('status', true)->orderBy('min_points')->get();
 
         $nextLevel = null;
         $pointsToNextLevel = 0;
+        $currentLevelMinPoints = $level ? (int) $level->min_points : 0;
 
-        if ($rollingTotalActive < 15001) {
-            $nextLevel = 'Globetrotter';
-            $pointsToNextLevel = 15001 - $rollingTotalActive;
-        } elseif ($rollingTotalActive < 30001) {
-            $nextLevel = 'Jetsetter';
-            $pointsToNextLevel = 30001 - $rollingTotalActive;
+        foreach ($allLevels as $candidateLevel) {
+            if ($rollingTotalActive < (int) $candidateLevel->min_points) {
+                $nextLevel = $candidateLevel->name;
+                $pointsToNextLevel = (int) $candidateLevel->min_points - $rollingTotalActive;
+                break;
+            }
         }
 
         $data = [
-            'gratitude' => $gratitude,
-            'guests' => $guests,
-            'level_info' => $level,
-            'earned_points' => $earnedPoints,
-            'bonus_points' => $bonusPoints,
-            'cancellations' => $cancellations,
-            'redemptions' => $redemptions,
-            'next_level' => $nextLevel,
-            'points_to_next_level' => $pointsToNextLevel,
-            'rolling_tier_points' => $rollingTotalActive,
-            'level_benefits' => $benefits,
-            'points_per_dollar' => $level ? (float) $level->redemption_points_per_dollar : 35,
+            'gratitude'             => $gratitude,
+            'guests'                => $guests,
+            'level_info'            => $level,
+            'earned_points'         => $earnedPoints,
+            'bonus_points'          => $bonusPoints,
+            'cancellations'         => $cancellations,
+            'redemptions'           => $redemptions,
+            'next_level'            => $nextLevel,
+            'points_to_next_level'  => $pointsToNextLevel,
+            'rolling_tier_points'   => $rollingTotalActive,
+            'level_benefits'        => $benefits,
+            'points_per_dollar'     => $level ? (float) $level->redemption_points_per_dollar : 35,
+            'interval_start'        => $evalStart->toDateString(),
+            'interval_end'          => $evalStart->copy()->addYears($intervalYears)->toDateString(),
+            'interval_years'        => $intervalYears,
+            'current_level_min'     => $currentLevelMinPoints,
         ];
 
         return response()->json($data);
@@ -318,8 +335,7 @@ class GratitudeController extends Controller
             return response()->json(['message' => 'Insufficient points or invalid request.'], 400);
         }
 
-        GratitudeService::syncAccountBalance($gratitudeNumber);
-
+        // syncAccountBalance is already called inside redeemPoints(); no second call needed.
         return response()->json(['message' => 'Points redeemed successfully!', 'redemption' => $result]);
     }
 
@@ -348,6 +364,18 @@ class GratitudeController extends Controller
             return response()->json(['message' => 'Failed to delete redemption'], 500);
         }
         return response()->json(['message' => 'Redemption removed securely']);
+    }
+
+    public function apiSyncBalance($gratitudeNumber)
+    {
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
+        GratitudeService::syncAccountBalance($gratitude->gratitudeNumber);
+        $gratitude->refresh();
+        return response()->json([
+            'message'        => 'Balance synced successfully.',
+            'useablePoints'  => $gratitude->useablePoints,
+            'totalPoints'    => $gratitude->totalPoints,
+        ]);
     }
 
 }

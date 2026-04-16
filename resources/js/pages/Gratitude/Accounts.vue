@@ -4,7 +4,7 @@ import AppLayout from '@/layouts/app/AppSidebarLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
-import { Upload } from 'lucide-vue-next';
+import { Upload, RefreshCw } from 'lucide-vue-next';
 import DataTable from '@/components/DataTable.vue';
 import { Button } from '@/components/ui/button';
 import { route } from 'ziggy-js';
@@ -95,6 +95,21 @@ const formatDate = (val: any) => {
 const getAccountRoute = (gratitudeNumber: any): string => {
     return route('gratitude.account.show', gratitudeNumber) as any as string;
 };
+
+const syncingRows = ref<Set<string>>(new Set());
+const syncBalance = async (gratitudeNumber: string) => {
+    syncingRows.value = new Set([...syncingRows.value, gratitudeNumber]);
+    try {
+        await axios.post(`/internal-api/gratitude/${gratitudeNumber}/sync-balance`);
+        await fetchAccountsData();
+    } catch (error) {
+        console.error('Failed to sync balance', error);
+    } finally {
+        const next = new Set(syncingRows.value);
+        next.delete(gratitudeNumber);
+        syncingRows.value = next;
+    }
+};
 </script>
 
 <template>
@@ -149,9 +164,20 @@ const getAccountRoute = (gratitudeNumber: any): string => {
                         </span>
                     </template>
                     <template #cell-actions="{ row }">
-                        <Link :href="getAccountRoute(row.gratitudeNumber)">
-                            <Button variant="ghost" size="sm">View</Button>
-                        </Link>
+                        <div class="flex items-center justify-center gap-1">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                :disabled="syncingRows.has((row as any).gratitudeNumber)"
+                                @click="syncBalance((row as any).gratitudeNumber)"
+                                title="Sync balance"
+                            >
+                                <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': syncingRows.has((row as any).gratitudeNumber) }" />
+                            </Button>
+                            <Link :href="getAccountRoute((row as any).gratitudeNumber)">
+                                <Button variant="ghost" size="sm">View</Button>
+                            </Link>
+                        </div>
                     </template>
                 </DataTable>
             </div>

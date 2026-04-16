@@ -4,7 +4,6 @@ namespace App\Models\Gratitude;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\User;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
 
@@ -17,11 +16,19 @@ class Gratitude extends Model
         return LogOptions::defaults()->logAll();
     }
 
+    // Gratitudes are identified by gratitudeNumber — there is no user_id on this table.
     protected $fillable = [
         'old_id',
         'gratitudeNumber',
         'totalPoints',
+        'totalEarnedPoints',
+        'totalBonusPoints',
+        'totalExpiredPoints',
+        'totalCancelledPoints',
+        'totalRedeemedPoints',
+        'totalRemainingPoints',
         'useablePoints',
+        'nonUseablePoints',
         'level',
         'levelHistory',
         'level_obtained_at',
@@ -29,20 +36,19 @@ class Gratitude extends Model
         'statusChange',
         'statusChangeReason',
         'systemLevelUpdate',
+        'is_active',
         'importStatus',
         'expires_at',
+        'last_activity_at',
     ];
 
     protected $casts = [
         'importStatus' => 'boolean',
         'systemLevelUpdate' => 'boolean',
+        'is_active' => 'boolean',
         'expires_at' => 'datetime',
         'level_obtained_at' => 'datetime',
+        'last_activity_at' => 'datetime',
         'levelHistory' => 'array',
     ];
-
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
 }

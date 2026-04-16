@@ -15,14 +15,16 @@ const props = defineProps({
 
 const emit = defineEmits(['saved']);
 const isOpen = ref(false);
-const form = ref({ ...props.level });
+const form = ref<any>({});
 
 const levelImage = ref<File | null>(null);
 const levelIcon = ref<File | null>(null);
 
-const rules = ref<{name: string, value: string, status: boolean, value_type: string}[]>([]);
+type Rule = { _key: number; name: string; value: string; status: boolean; value_type: string };
+let ruleCounter = 0;
+const rules = ref<Rule[]>([]);
 
-// Pre-fill rules when opening
+// Deep-clone and pre-fill every time the modal opens
 watch(isOpen, (newVal) => {
     if (newVal) {
         form.value = {
@@ -32,13 +34,14 @@ watch(isOpen, (newVal) => {
         };
         levelImage.value = null;
         levelIcon.value = null;
-        if (props.level.level_rules) {
-            rules.value = typeof props.level.level_rules === 'string' 
-                ? JSON.parse(props.level.level_rules) 
-                : props.level.level_rules;
-        } else {
-            rules.value = [];
-        }
+
+        // Deep-clone rules so we never mutate the prop
+        const raw = props.level.level_rules
+            ? (typeof props.level.level_rules === 'string'
+                ? JSON.parse(props.level.level_rules)
+                : props.level.level_rules)
+            : [];
+        rules.value = (raw as any[]).map((r: any) => ({ ...r, _key: ++ruleCounter }));
     }
 });
 
@@ -53,7 +56,7 @@ const handleIconUpload = (event: Event) => {
 };
 
 const addRule = () => {
-    rules.value.push({ name: '', value: '', status: true, value_type: 'string' });
+    rules.value.push({ _key: ++ruleCounter, name: '', value: '', status: true, value_type: 'string' });
 };
 const removeRule = (index: number) => {
     rules.value.splice(index, 1);
@@ -62,28 +65,28 @@ const removeRule = (index: number) => {
 const submit = async () => {
     try {
         const formData = new FormData();
-        formData.append('_method', 'PUT'); // Laravel spoofing since HTML forms don't support PUT with FormData natively in some contexts, but Axios POST over multipart is better tested this way.
+        formData.append('_method', 'PUT');
         formData.append('name', form.value.name);
         formData.append('min_points', String(form.value.min_points));
         if (form.value.max_points !== '' && form.value.max_points !== null) {
             formData.append('max_points', String(form.value.max_points));
         }
         formData.append('status', String(form.value.status));
-        if (form.value.redeemation_points_per_dollar) {
-            formData.append('redeemation_points_per_dollar', String(form.value.redeemation_points_per_dollar));
-        }
+        formData.append('redemption_points_per_dollar', String(form.value.redemption_points_per_dollar || 35));
         formData.append('earned_expire_days', String(form.value.earned_expire_days || 730));
         formData.append('bonus_expire_days', String(form.value.bonus_expire_days || 730));
-        
+
         if (levelImage.value) formData.append('level_image', levelImage.value);
         if (levelIcon.value) formData.append('level_icon', levelIcon.value);
-        if (rules.value.length > 0) formData.append('level_rules', JSON.stringify(rules.value));
-        else formData.append('level_rules', ''); // clear rules
+
+        // Always send level_rules — empty string signals "clear all rules"
+        const rulesPayload = rules.value.map(({ _key, ...rest }) => rest);
+        formData.append('level_rules', rulesPayload.length > 0 ? JSON.stringify(rulesPayload) : '');
 
         await axios.post(`/internal-api/gratitude/levels/${props.level.id}`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
-        
+
         isOpen.value = false;
         emit('saved');
     } catch (error) {
@@ -119,7 +122,7 @@ const submit = async () => {
                         </div>
                         <div class="col-span-2">
                             <Label>Points Per Dollar (Redemption Rate)</Label>
-                            <Input type="number" step="0.01" min="1" v-model="form.redeemation_points_per_dollar" required />
+                            <Input type="number" step="0.01" min="1" v-model="form.redemption_points_per_dollar" required />
                             <p class="text-xs text-muted-foreground mt-1">How many points equal $1 in value. Explorer=35, Globetrotter=30, Jetsetter=25</p>
                         </div>
                         <div>
@@ -144,30 +147,36 @@ const submit = async () => {
                     </div>
 
                     <div class="mt-6 border-t pt-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <Label class="text-lg font-semibold">Rules Repeater</Label>
-                            <Button type="button" variant="outline" size="sm" @click="addRule">Add Rule</Button>
+                        <div class="flex items-center justify-between mb-3">
+                            <Label class="text-base font-semibold">Rules</Label>
+                            <Button type="button" variant="outline" size="sm" @click="addRule">+ Add Rule</Button>
                         </div>
-                        <div v-for="(rule, index) in rules" :key="index" class="p-4 border rounded-md mb-2 bg-muted/10">
+                        <div v-for="(rule, index) in rules" :key="rule._key" class="p-4 border rounded-md mb-2 bg-muted/10">
                             <div class="grid grid-cols-12 gap-2 items-end">
-                                <div class="col-span-4">
-                                    <Label>Rule Name</Label>
+                                <div class="col-span-3">
+                                    <Label class="text-xs">Rule Name</Label>
                                     <Input v-model="rule.name" placeholder="e.g., discount_rate" required />
                                 </div>
                                 <div class="col-span-3">
-                                    <Label>Value</Label>
-                                    <Input v-model="rule.value" required />
-                                </div>
-                                <div class="col-span-3">
-                                    <Label>Value Type</Label>
-                                    <select v-model="rule.value_type" class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50">
+                                    <Label class="text-xs">Value Type</Label>
+                                    <select v-model="rule.value_type" class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                                         <option value="string">String</option>
                                         <option value="number">Number</option>
                                         <option value="boolean">Boolean</option>
                                     </select>
                                 </div>
-                                <div class="col-span-1 flex justify-center pb-2">
-                                    <input type="checkbox" v-model="rule.status" title="Active" class="rounded border-input text-primary focus:ring-primary h-4 w-4" />
+                                <div class="col-span-3">
+                                    <Label class="text-xs">Value</Label>
+                                    <select v-if="rule.value_type === 'boolean'" v-model="rule.value" class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                                        <option value="true">True</option>
+                                        <option value="false">False</option>
+                                    </select>
+                                    <Input v-else-if="rule.value_type === 'number'" type="number" v-model="rule.value" required />
+                                    <Input v-else v-model="rule.value" required />
+                                </div>
+                                <div class="col-span-2 flex flex-col items-center gap-1">
+                                    <Label class="text-xs">Active</Label>
+                                    <input type="checkbox" v-model="rule.status" class="rounded border-input text-primary focus:ring-primary h-4 w-4 mt-1" />
                                 </div>
                                 <div class="col-span-1 flex justify-end pb-1">
                                     <Button type="button" variant="ghost" size="icon" class="h-8 w-8 text-destructive" @click="removeRule(index)">
@@ -176,9 +185,9 @@ const submit = async () => {
                                 </div>
                             </div>
                         </div>
-                        <p v-if="rules.length === 0" class="text-sm text-muted-foreground text-center py-2">No rules added.</p>
+                        <p v-if="rules.length === 0" class="text-sm text-muted-foreground text-center py-2 border border-dashed rounded-md">No rules added.</p>
                     </div>
-                    
+
                     <div class="flex justify-end space-x-2 mt-6">
                         <Button type="button" variant="outline" @click="isOpen = false">Cancel</Button>
                         <Button type="submit">Save</Button>

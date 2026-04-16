@@ -55,13 +55,15 @@ class TierService
 
         $now = Carbon::now();
 
-        // Determine the interval using the current level's config
+        // Determine the interval length from the current level config (default 2 years)
         $currentLevelConfig = $allLevels->firstWhere('name', $gratitude->level)
             ?? $allLevels->sortBy('min_points')->first();
 
-        $intervalYears = $currentLevelConfig->level_interval_years ?? 2;
+        $intervalYears = (int) ($currentLevelConfig->level_interval_years ?? 2);
 
-        // level_obtained_at is null for legacy/imported records — treat as interval-start = now - interval
+        // The evaluation window always looks back <intervalYears> from today.
+        // level_obtained_at is kept as a reference for history but the rolling window
+        // is what determines qualification at any given moment.
         $intervalStart = $gratitude->level_obtained_at
             ? Carbon::parse($gratitude->level_obtained_at)
             : $now->copy()->subYears($intervalYears);
@@ -69,33 +71,32 @@ class TierService
         $intervalEnd     = $intervalStart->copy()->addYears($intervalYears);
         $intervalExpired = $now->greaterThan($intervalEnd);
 
-        // Earned points that became usable within the current interval
+        // When the interval has expired, reset to a fresh rolling window from today
+        $evalStart = $intervalExpired
+            ? $now->copy()->subYears($intervalYears)
+            : $intervalStart;
+
+        // Net earned (tier) points usable within the evaluation window
         $earnedInInterval = (int) EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
             ->activeStatus()
+            ->whereNull('cancel_id')
             ->whereNotNull('usable_date')
-            ->where('usable_date', '>=', $intervalStart)
+            ->where('usable_date', '>=', $evalStart)
             ->where('usable_date', '<=', $now)
             ->sum(DB::raw('points - redeemed_points'));
 
         $oldLevel = $gratitude->level ?? self::TIER_EXPLORER;
+        $newLevel = $this->resolveLevel($earnedInInterval, $gratitudeNumber, $evalStart, $now, $allLevels);
 
-        if ($intervalExpired) {
-            // Interval has ended: resolve the correct level from scratch and start a new interval
-            $newLevel = $this->resolveLevel($earnedInInterval, $gratitudeNumber, $intervalStart, $intervalEnd, $allLevels);
+        $hierarchy     = $this->buildHierarchy($allLevels);
+        $oldRank       = $hierarchy[$oldLevel] ?? 1;
+        $newRank       = $hierarchy[$newLevel] ?? 1;
+
+        if ($newRank !== $oldRank || $intervalExpired) {
+            // Apply upgrade, downgrade, or interval renewal.
+            // Both directions are allowed immediately — a trip cancellation that drops
+            // points below the current level's threshold triggers a downgrade right away.
             $this->applyLevelChange($gratitude, $oldLevel, $newLevel, $earnedInInterval, $changedBy, $now);
-        } else {
-            // Interval is still active: only upgrade if the member has crossed a higher threshold
-            $qualifiedLevel = $this->resolveLevel($earnedInInterval, $gratitudeNumber, $intervalStart, $now, $allLevels);
-
-            $hierarchy = $this->buildHierarchy($allLevels);
-            $qualifiedRank = $hierarchy[$qualifiedLevel] ?? 1;
-            $currentRank   = $hierarchy[$oldLevel] ?? 1;
-
-            if ($qualifiedRank > $currentRank) {
-                // Upgrade is immediate; the new interval starts from today
-                $this->applyLevelChange($gratitude, $oldLevel, $qualifiedLevel, $earnedInInterval, $changedBy, $now);
-            }
-            // No downgrade while inside the interval
         }
 
         return $gratitude->fresh();
@@ -334,8 +335,8 @@ class TierService
     {
         return match ($changeType) {
             'upgrade'    => "Upgraded from {$fromLevel} to {$toLevel} — points threshold met",
-            'downgrade'  => "Downgraded from {$fromLevel} to {$toLevel} — insufficient points at interval expiry",
-            'maintained' => "Level {$fromLevel} maintained — interval renewed",
+            'downgrade'  => "Downgraded from {$fromLevel} to {$toLevel} — points dropped below threshold",
+            'maintained' => "Level {$fromLevel} maintained — 2-year window renewed",
             default      => "Level set to {$toLevel}",
         };
     }

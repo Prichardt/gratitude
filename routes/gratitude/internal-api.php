@@ -44,6 +44,9 @@ Route::name('gratitude.')->prefix('gratitude/')
         // Import Benefits
         Route::get('migrate-benefits/data', [GratitudeBenefitController::class, 'importBenefits'])->name('migrate-benefits.data');
 
+        // Sync balance
+        Route::post('{gratitudeNumber}/sync-balance', [GratitudeController::class, 'apiSyncBalance'])->name('sync-balance');
+
         // Redemption CRUD
         Route::post('{gratitudeNumber}/redeem', [GratitudeController::class, 'apiAddRedeem'])->name('redeem');
         Route::get('{gratitudeNumber}/redeem/{id}', [GratitudeController::class, 'apiShowRedemption'])->name('redeem.show');

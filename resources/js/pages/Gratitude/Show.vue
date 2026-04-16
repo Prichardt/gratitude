@@ -18,7 +18,7 @@ import ViewEntryDetails from '@/components/Gratitude/ViewEntryDetails.vue';
 import ViewRedemptionDetails from '@/components/Gratitude/ViewRedemptionDetails.vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, ChevronDown, Award, History, Gift, ShieldAlert, Zap, Clock } from 'lucide-vue-next';
+import { ArrowLeft, ChevronDown, Award, History, Gift, ShieldAlert, Zap, Clock, RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-vue-next';
 
 const props = defineProps({
     gratitudeNumber: {
@@ -45,6 +45,10 @@ const data = ref<any>({
     rolling_tier_points: 0,
     level_benefits: [],
     points_per_dollar: 35,
+    interval_start: null,
+    interval_end: null,
+    interval_years: 2,
+    current_level_min: 0,
 });
 
 const fetchDetails = async () => {
@@ -183,6 +187,43 @@ const isTierOpen = ref(false);
 const isBonusOpen = ref(false);
 const isRedeemOpen = ref(false);
 const isBenefitsOpen = ref(false);
+const isLevelHistoryOpen = ref(false);
+
+// Level progress helpers
+const levelProgressPct = computed(() => {
+    const rolling = data.value.rolling_tier_points ?? 0;
+    const nextMin = data.value.next_level
+        ? (rolling + (data.value.points_to_next_level ?? 0))
+        : rolling;
+    const currentMin = data.value.current_level_min ?? 0;
+    const range = nextMin - currentMin;
+    if (range <= 0) return 100;
+    return Math.min(100, Math.round(((rolling - currentMin) / range) * 100));
+});
+
+const changeTypeIcon = (type: string) => {
+    if (type === 'upgrade')   return TrendingUp;
+    if (type === 'downgrade') return TrendingDown;
+    return Minus;
+};
+const changeTypeClass = (type: string) => {
+    if (type === 'upgrade')   return 'text-green-600 dark:text-green-400';
+    if (type === 'downgrade') return 'text-red-600 dark:text-red-400';
+    return 'text-muted-foreground';
+};
+
+const syncing = ref(false);
+const syncBalance = async () => {
+    syncing.value = true;
+    try {
+        await axios.post(`/internal-api/gratitude/${props.gratitudeNumber}/sync-balance`);
+        await fetchDetails();
+    } catch (error) {
+        console.error('Failed to sync balance', error);
+    } finally {
+        syncing.value = false;
+    }
+};
 
 const formatNumber = (num: number) => {
     return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
@@ -235,6 +276,15 @@ const formatNumber = (num: number) => {
                     <!-- Actions & Level -->
                     <div class="flex items-center gap-6">
                         <div class="flex items-center space-x-3">
+                            <Button
+                                variant="outline"
+                                class="shadow-md transition-all h-10 px-4 text-xs font-bold tracking-wider uppercase rounded-lg flex items-center gap-2"
+                                :disabled="syncing"
+                                @click="syncBalance"
+                            >
+                                <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': syncing }" />
+                                {{ syncing ? 'Syncing...' : 'Sync Balance' }}
+                            </Button>
                             <Button class="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all h-10 px-6 text-xs font-bold tracking-wider uppercase rounded-lg">
                                 Update Status
                             </Button>
@@ -248,6 +298,100 @@ const formatNumber = (num: number) => {
                             <img v-else-if="data.level_info?.level_image" :src="`/storage/${data.level_info.level_image}`" class="w-20 h-20 xl:w-24 xl:h-24 object-contain drop-shadow-xl" :alt="data.gratitude.level" />
                             <Award v-else class="w-20 h-20 xl:w-24 xl:h-24 text-amber-500 drop-shadow-xl" />
                         </div>
+                    </div>
+                </div>
+            </Card>
+
+            <!-- Dashboard Row 1b: Level Status Card -->
+            <Card v-if="data.gratitude" class="shadow-sm border-border overflow-hidden mb-8">
+                <!-- Header / toggle -->
+                <div
+                    class="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors border-b border-transparent"
+                    :class="{ 'border-border': isLevelHistoryOpen }"
+                    @click="isLevelHistoryOpen = !isLevelHistoryOpen"
+                >
+                    <div class="flex items-center gap-4 flex-1 min-w-0">
+                        <!-- Level icon / badge -->
+                        <div class="shrink-0">
+                            <img v-if="data.level_info?.level_icon" :src="`/storage/${data.level_info.level_icon}`" class="w-10 h-10 object-contain drop-shadow" :alt="data.gratitude.level" />
+                            <img v-else-if="data.level_info?.level_image" :src="`/storage/${data.level_info.level_image}`" class="w-10 h-10 object-contain drop-shadow" :alt="data.gratitude.level" />
+                            <Award v-else class="w-10 h-10 text-amber-500" />
+                        </div>
+                        <!-- Level name + window label -->
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-base font-bold text-foreground">{{ data.gratitude.level }}</span>
+                                <span v-if="data.gratitude.statusChange" :class="['inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider',
+                                    data.gratitude.statusChange === 'upgrade'   ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400' :
+                                    data.gratitude.statusChange === 'downgrade' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' :
+                                    'bg-muted text-muted-foreground']">
+                                    <component :is="changeTypeIcon(data.gratitude.statusChange)" class="w-3 h-3" />
+                                    {{ data.gratitude.statusChange }}
+                                </span>
+                            </div>
+                            <p class="text-xs text-muted-foreground mt-0.5">
+                                {{ data.interval_years }}-year window:
+                                {{ data.interval_start }} → {{ data.interval_end }}
+                            </p>
+                        </div>
+                        <!-- Progress bar + points -->
+                        <div class="flex-1 min-w-[120px] max-w-xs hidden sm:block px-4">
+                            <div class="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                                <span>{{ formatNumber(data.rolling_tier_points) }} pts</span>
+                                <span v-if="data.next_level">{{ formatNumber(data.rolling_tier_points + data.points_to_next_level) }} for {{ data.next_level }}</span>
+                                <span v-else class="text-green-600 dark:text-green-400 font-semibold">Top tier</span>
+                            </div>
+                            <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                <div class="h-full rounded-full bg-primary transition-all duration-500" :style="{ width: levelProgressPct + '%' }" />
+                            </div>
+                            <p v-if="data.next_level" class="text-[10px] text-muted-foreground mt-1">
+                                {{ formatNumber(data.points_to_next_level) }} pts to {{ data.next_level }}
+                            </p>
+                        </div>
+                    </div>
+                    <ChevronDown class="w-4 h-4 text-muted-foreground shrink-0 transition-transform duration-200 ml-4" :class="{ 'rotate-180': isLevelHistoryOpen }" />
+                </div>
+
+                <!-- Level History (collapsible) -->
+                <div v-show="isLevelHistoryOpen" class="border-t border-border bg-card">
+                    <div class="p-4">
+                        <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Level History</p>
+                        <div v-if="data.gratitude.levelHistory && data.gratitude.levelHistory.length" class="space-y-2">
+                            <div
+                                v-for="(entry, i) in [...(data.gratitude.levelHistory)].reverse()"
+                                :key="i"
+                                class="flex items-start gap-3 rounded-md border border-border bg-muted/10 px-4 py-3"
+                            >
+                                <component
+                                    :is="changeTypeIcon(entry.changeType)"
+                                    class="w-4 h-4 mt-0.5 shrink-0"
+                                    :class="changeTypeClass(entry.changeType)"
+                                />
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="text-sm font-semibold text-foreground">
+                                            {{ entry.fromLevel }}
+                                            <span class="text-muted-foreground font-normal mx-1">→</span>
+                                            {{ entry.toLevel }}
+                                        </span>
+                                        <span :class="['inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider',
+                                            entry.changeType === 'upgrade'   ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400' :
+                                            entry.changeType === 'downgrade' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' :
+                                            'bg-muted text-muted-foreground']">
+                                            {{ entry.changeType }}
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-muted-foreground mt-0.5">{{ entry.reason }}</p>
+                                </div>
+                                <div class="text-right shrink-0">
+                                    <p class="text-xs font-medium text-foreground">{{ entry.date }}</p>
+                                    <p class="text-[10px] text-muted-foreground">{{ formatNumber(entry.earnedPoints) }} pts</p>
+                                </div>
+                            </div>
+                        </div>
+                        <p v-else class="text-sm text-muted-foreground text-center py-4 border border-dashed border-border rounded-md">
+                            No level changes recorded yet.
+                        </p>
                     </div>
                 </div>
             </Card>
@@ -287,6 +431,7 @@ const formatNumber = (num: number) => {
                     <div class="p-4 flex-1 flex flex-col justify-center bg-green-50/50 dark:bg-green-950/20 shadow-[inset_4px_0_0_0_rgba(34,197,94,0.2)]">
                         <span class="text-xs text-green-600 dark:text-green-400 font-bold uppercase tracking-wider mb-1">Usable Points</span>
                         <span class="font-bold text-2xl text-green-700 dark:text-green-300">{{ formatNumber(usablePoints) }}</span>
+                        <span class="text-xs text-green-600/70 dark:text-green-400/70 font-medium mt-0.5">(${{ (usablePoints / (data.points_per_dollar || 35)).toFixed(2) }})</span>
                     </div>
                 </div>
             </Card>

@@ -102,6 +102,15 @@ watch(isOpen, (newVal) => {
                     <div>
                         <span
                             class="text-xs font-semibold text-muted-foreground uppercase"
+                            >Points Per Dollar</span
+                        >
+                        <div class="mt-1 text-base font-medium">
+                            {{ level.redemption_points_per_dollar || 35 }} pts = $1
+                        </div>
+                    </div>
+                    <div>
+                        <span
+                            class="text-xs font-semibold text-muted-foreground uppercase"
                             >Earned Expiry</span
                         >
                         <div class="mt-1 text-base font-medium">
@@ -164,9 +173,7 @@ watch(isOpen, (newVal) => {
 
                 <div class="border-t border-border pt-4">
                     <div class="mb-3 block">
-                        <span class="text-lg font-semibold"
-                            >Rules Repeater</span
-                        >
+                        <span class="text-lg font-semibold">Rules</span>
                     </div>
                     <div
                         v-for="(rule, index) in rules"
@@ -174,30 +181,25 @@ watch(isOpen, (newVal) => {
                         class="mb-3 grid grid-cols-12 items-center gap-4 rounded-md border border-border bg-muted/10 p-4"
                     >
                         <div class="col-span-4">
-                            <span
-                                class="text-xs font-semibold text-muted-foreground uppercase"
-                                >Rule Name</span
-                            >
-                            <div class="mt-1 text-sm font-medium break-words">
-                                {{ rule.name }}
-                            </div>
+                            <span class="text-xs font-semibold text-muted-foreground uppercase">Rule Name</span>
+                            <div class="mt-1 text-sm font-medium break-words font-mono">{{ rule.name }}</div>
                         </div>
                         <div class="col-span-4">
-                            <span
-                                class="text-xs font-semibold text-muted-foreground uppercase"
-                                >Value</span
-                            >
+                            <span class="text-xs font-semibold text-muted-foreground uppercase">Value</span>
                             <div class="mt-1 text-sm font-medium break-words">
-                                {{ rule.value }}
+                                <span v-if="rule.value_type === 'boolean'"
+                                    :class="String(rule.value) === 'true'
+                                        ? 'inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800'
+                                        : 'inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800'">
+                                    {{ String(rule.value) === 'true' ? 'True' : 'False' }}
+                                </span>
+                                <span v-else>{{ rule.value }}</span>
                             </div>
                         </div>
                         <div class="col-span-3">
-                            <span
-                                class="text-xs font-semibold text-muted-foreground uppercase"
-                                >Type</span
-                            >
-                            <div class="mt-1 text-sm font-medium capitalize">
-                                {{ rule.value_type }}
+                            <span class="text-xs font-semibold text-muted-foreground uppercase">Type</span>
+                            <div class="mt-1">
+                                <span class="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium capitalize">{{ rule.value_type }}</span>
                             </div>
                         </div>
                         <div class="col-span-1 text-right">
