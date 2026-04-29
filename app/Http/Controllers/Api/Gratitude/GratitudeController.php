@@ -31,6 +31,7 @@ class GratitudeController extends Controller
     public function index()
     {
         $gratitudes = $this->gratitudeService->allGratitudes();
+
         return response()->json($gratitudes);
     }
 
@@ -46,6 +47,7 @@ class GratitudeController extends Controller
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
         $point = $this->earnedPointService->add($gratitude, $request->validated());
+
         return response()->json(['message' => 'Points added', 'point' => $point], 201);
     }
 
@@ -54,6 +56,7 @@ class GratitudeController extends Controller
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
         $point = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $updated = $this->earnedPointService->update($point, $gratitude, $request->validated());
+
         return response()->json(['message' => 'Points updated', 'point' => $updated]);
     }
 
@@ -61,6 +64,7 @@ class GratitudeController extends Controller
     {
         $point = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $this->earnedPointService->delete($point);
+
         return response()->json(['message' => 'Earned point deleted']);
     }
 
@@ -69,6 +73,7 @@ class GratitudeController extends Controller
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
         $point = $this->bonusPointService->add($gratitude, $request->validated());
+
         return response()->json(['message' => 'Bonus points added', 'point' => $point], 201);
     }
 
@@ -77,6 +82,7 @@ class GratitudeController extends Controller
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
         $point = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $updated = $this->bonusPointService->update($point, $gratitude, $request->validated());
+
         return response()->json(['message' => 'Bonus points updated', 'point' => $updated]);
     }
 
@@ -84,6 +90,7 @@ class GratitudeController extends Controller
     {
         $point = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $this->bonusPointService->delete($point);
+
         return response()->json(['message' => 'Bonus point deleted']);
     }
 
@@ -97,6 +104,7 @@ class GratitudeController extends Controller
             $request->integer('earned_point_id') ?: null,
             $request->integer('bonus_point_id') ?: null,
         );
+
         return response()->json(['message' => 'Points cancelled', 'cancellation' => $cancel], 201);
     }
 
@@ -104,6 +112,7 @@ class GratitudeController extends Controller
     {
         $cancel = Cancellation::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $this->cancellationService->delete($cancel);
+
         return response()->json(['message' => 'Cancellation deleted']);
     }
 
@@ -111,9 +120,13 @@ class GratitudeController extends Controller
     public function storeRedemption(StoreRedemptionRequest $request, string $gratitudeNumber)
     {
         $result = $this->gratitudeService->redeemPoints($gratitudeNumber, $request->validated(), $request->points);
-        if (!$result) {
+        if (is_array($result) && isset($result['error'])) {
+            return response()->json(['message' => $result['error']], 422);
+        }
+        if (! $result) {
             return response()->json(['message' => 'Insufficient points or invalid request.'], 422);
         }
+
         return response()->json(['message' => 'Points redeemed successfully', 'redemption' => $result], 201);
     }
 
@@ -122,15 +135,17 @@ class GratitudeController extends Controller
         $request->validate(['amount' => 'nullable|numeric', 'reason' => 'nullable|string']);
         $redemption = GratitudeService::updateRedemption($id, $request->all());
         GratitudeService::syncAccountBalance($gratitudeNumber);
+
         return response()->json(['message' => 'Redemption updated', 'redemption' => $redemption]);
     }
 
     public function destroyRedemption(string $gratitudeNumber, int $id)
     {
         $success = GratitudeService::deleteRedemption($id);
-        if (!$success) {
+        if (! $success) {
             return response()->json(['message' => 'Failed to delete redemption'], 500);
         }
+
         return response()->json(['message' => 'Redemption deleted']);
     }
 }

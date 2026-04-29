@@ -13,14 +13,15 @@ use App\Models\Gratitude\Cancellation;
 use App\Models\Gratitude\EarnedPoint;
 use App\Models\Gratitude\Gratitude;
 use App\Models\Gratitude\GratitudeBenefit;
-use App\Models\Gratitude\GratitudeReserve;
 use App\Models\Gratitude\GratitudeLevel;
+use App\Models\Gratitude\GratitudeReserve;
 use App\Models\Gratitude\RedeemPoints;
 use App\Services\Gratitude\BonusPointService;
 use App\Services\Gratitude\CancellationService;
 use App\Services\Gratitude\EarnedPointService;
 use App\Services\Gratitude\GratitudeService;
 use Carbon\Carbon;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -34,7 +35,7 @@ class GratitudeController extends Controller
         protected CancellationService $cancellationService,
     ) {}
 
-    private function aivteamHttp(): \Illuminate\Http\Client\PendingRequest
+    private function aivteamHttp(): PendingRequest
     {
         return Http::withoutVerifying()
             ->withToken(config('services.aivteam.access_token'))
@@ -43,16 +44,16 @@ class GratitudeController extends Controller
 
     public function import()
     {
-        $getResponse     = $this->aivteamHttp()->get('https://aivteam.com/api/gratitude/get/gratitude-data-all');
+        $getResponse = $this->aivteamHttp()->get('https://aivteam.com/api/gratitude/get/gratitude-data-all');
         $getJourneysData = $this->aivteamHttp()->get('https://aivteam.com/api/get/all/journeys');
 
-        if (!$getResponse->successful()) {
+        if (! $getResponse->successful()) {
             return response()->json(['message' => 'Failed to fetch data from remote API Testing', 'status' => $getResponse->status()], 500);
         }
 
         $data = $getResponse->json();
 
-        if (empty($data) || !is_array($data)) {
+        if (empty($data) || ! is_array($data)) {
             return response()->json(['message' => 'Invalid data format or empty payload'], 400);
         }
 
@@ -71,20 +72,23 @@ class GratitudeController extends Controller
             $this->gratitudeService->import($data, $journeysMap);
 
             DB::commit();
+
             return response()->json(['message' => 'Data imported successfully']);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => 'Import failed: ' . $e->getMessage()], 500);
+
+            return response()->json(['message' => 'Import failed: '.$e->getMessage()], 500);
         }
     }
 
     public function apiIndex()
     {
         $gratitudes = Gratitude::select(
-                'id', 'gratitudeNumber', 'level', 'level_obtained_at',
-                'totalPoints', 'useablePoints', 'totalExpiredPoints',
-                'status', 'is_active', 'last_activity_at', 'created_at', 'updated_at'
-            )
+            'id', 'gratitudeNumber', 'level', 'level_obtained_at',
+            'totalPoints', 'useablePoints', 'totalExpiredPoints',
+            'totalRemainingPoints', 'totalRedeemedPoints', 'totalCancelledPoints',
+            'status', 'is_active', 'last_activity_at', 'created_at', 'updated_at'
+        )
             ->selectSub(
                 EarnedPoint::selectRaw('COALESCE(SUM(points), 0)')
                     ->whereColumn('gratitudeNumber', 'gratitudes.gratitudeNumber')
@@ -120,8 +124,9 @@ class GratitudeController extends Controller
     public function apiReserve()
     {
         $reserves = GratitudeReserve::orderBy('created_at', 'desc')->get();
+
         return response()->json([
-            'reserves' => $reserves
+            'reserves' => $reserves,
         ]);
     }
 
@@ -145,7 +150,7 @@ class GratitudeController extends Controller
 
         return response()->json([
             'earned_points' => $earned,
-            'bonus_points' => $bonus
+            'bonus_points' => $bonus,
         ]);
     }
 
@@ -155,7 +160,7 @@ class GratitudeController extends Controller
 
         // Fetch guest info from aivteam API
         $guestsResponse = $this->aivteamHttp()->get(
-            config('services.aivteam.base_url') . '/api/gratitude/get/gratitude-by-number/' . $gratitudeNumber
+            config('services.aivteam.base_url').'/api/gratitude/get/gratitude-by-number/'.$gratitudeNumber
         );
         $guests = $guestsResponse->successful() ? $guestsResponse->json() : [];
 
@@ -166,20 +171,21 @@ class GratitudeController extends Controller
                 $q->where('benefit_gratitude_level.gratitude_level_id', $level->id)
                     ->where('benefit_gratitude_level.is_active', true);
             })->with([
-                        'levels' => function ($q) use ($level) {
-                            $q->where('benefit_gratitude_level.gratitude_level_id', $level->id);
-                        }
-                    ])->get()->map(function ($benefit) {
-                        // Simplify the output for the frontend
-                        $levelPivot = $benefit->levels->first();
-                        return [
-                            'id' => $benefit->id,
-                            'name' => $benefit->name,
-                            'benefit_description' => $benefit->description,
-                            'value' => $levelPivot ? $levelPivot->pivot->value : null,
-                            'level_description' => $levelPivot ? $levelPivot->pivot->description : null,
-                        ];
-                    });
+                'levels' => function ($q) use ($level) {
+                    $q->where('benefit_gratitude_level.gratitude_level_id', $level->id);
+                },
+            ])->get()->map(function ($benefit) {
+                // Simplify the output for the frontend
+                $levelPivot = $benefit->levels->first();
+
+                return [
+                    'id' => $benefit->id,
+                    'name' => $benefit->name,
+                    'benefit_description' => $benefit->description,
+                    'value' => $levelPivot ? $levelPivot->pivot->value : null,
+                    'level_description' => $levelPivot ? $levelPivot->pivot->description : null,
+                ];
+            });
         }
 
         $earnedPoints = EarnedPoint::with(['cancellation', 'redemptions.redeemPoint'])->where('gratitudeNumber', $gratitudeNumber)->get();
@@ -187,26 +193,27 @@ class GratitudeController extends Controller
         $cancellations = Cancellation::where('gratitudeNumber', $gratitudeNumber)->get();
         $redemptions = RedeemPoints::with('details')->where('gratitudeNumber', $gratitudeNumber)->get();
 
-        // Rolling 2-year evaluation window (mirrors TierService logic exactly)
+        $this->attachCancellationHistory($earnedPoints, $bonusPoints, $cancellations);
+
+        // Current 2-year membership interval (mirrors TierService logic).
         $intervalYears = $level ? (int) ($level->level_interval_years ?? 2) : 2;
-        $now           = Carbon::now();
+        $now = Carbon::now();
 
         $intervalStart = $gratitude->level_obtained_at
             ? Carbon::parse($gratitude->level_obtained_at)
-            : $now->copy()->subYears($intervalYears);
+            : ($gratitude->created_at ? Carbon::parse($gratitude->created_at) : $now->copy());
 
-        $intervalEnd     = $intervalStart->copy()->addYears($intervalYears);
-        $intervalExpired = $now->greaterThan($intervalEnd);
-        $evalStart       = $intervalExpired ? $now->copy()->subYears($intervalYears) : $intervalStart;
+        $intervalEnd = $intervalStart->copy()->addYears($intervalYears);
 
-        // Net earned (tier) points usable within the evaluation window
+        // Earned journey points usable within the interval. Redemptions do not reduce level progress.
         $rollingTotalActive = (int) EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
             ->activeStatus()
             ->whereNull('cancel_id')
+            ->whereNotNull('journey_id')
             ->whereNotNull('usable_date')
-            ->where('usable_date', '>=', $evalStart)
+            ->where('usable_date', '>=', $intervalStart)
             ->where('usable_date', '<=', $now)
-            ->sum(DB::raw('points - redeemed_points'));
+            ->sum(DB::raw('CASE WHEN COALESCE(points, 0) - COALESCE(cancelled_points, 0) > 0 THEN COALESCE(points, 0) - COALESCE(cancelled_points, 0) ELSE 0 END'));
 
         // Determine next level dynamically from the levels table (ordered lowest → highest).
         $allLevels = GratitudeLevel::where('status', true)->orderBy('min_points')->get();
@@ -224,22 +231,25 @@ class GratitudeController extends Controller
         }
 
         $data = [
-            'gratitude'             => $gratitude,
-            'guests'                => $guests,
-            'level_info'            => $level,
-            'earned_points'         => $earnedPoints,
-            'bonus_points'          => $bonusPoints,
-            'cancellations'         => $cancellations,
-            'redemptions'           => $redemptions,
-            'next_level'            => $nextLevel,
-            'points_to_next_level'  => $pointsToNextLevel,
-            'rolling_tier_points'   => $rollingTotalActive,
-            'level_benefits'        => $benefits,
-            'points_per_dollar'     => $level ? (float) $level->redemption_points_per_dollar : 35,
-            'interval_start'        => $evalStart->toDateString(),
-            'interval_end'          => $evalStart->copy()->addYears($intervalYears)->toDateString(),
-            'interval_years'        => $intervalYears,
-            'current_level_min'     => $currentLevelMinPoints,
+            'gratitude' => $gratitude,
+            'guests' => $guests,
+            'level_info' => $level,
+            'earned_points' => $earnedPoints,
+            'bonus_points' => $bonusPoints,
+            'cancellations' => $cancellations,
+            'redemptions' => $redemptions,
+            'points_history' => $this->buildPointsHistory($earnedPoints, $bonusPoints, $cancellations, $redemptions),
+            'next_level' => $nextLevel,
+            'points_to_next_level' => $pointsToNextLevel,
+            'rolling_tier_points' => $rollingTotalActive,
+            'level_benefits' => $benefits,
+            'points_per_dollar' => $level ? (float) $level->redemption_points_per_dollar : 35,
+            'partner_points_per_dollar' => $level ? (float) ($level->partner_points_per_dollar ?: $level->redemption_points_per_dollar) : 35,
+            'redemption_points_per_dollar' => $level ? (float) $level->redemption_points_per_dollar : 35,
+            'interval_start' => $intervalStart->toDateString(),
+            'interval_end' => $intervalEnd->toDateString(),
+            'interval_years' => $intervalYears,
+            'current_level_min' => $currentLevelMinPoints,
         ];
 
         return response()->json($data);
@@ -249,6 +259,7 @@ class GratitudeController extends Controller
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
         $point = $this->earnedPointService->add($gratitude, $request->validated());
+
         return response()->json(['message' => 'Points added', 'point' => $point]);
     }
 
@@ -257,6 +268,7 @@ class GratitudeController extends Controller
         $point = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
         $updated = $this->earnedPointService->update($point, $gratitude, $request->validated());
+
         return response()->json(['message' => 'Points updated', 'point' => $updated]);
     }
 
@@ -264,6 +276,7 @@ class GratitudeController extends Controller
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
         $point = $this->bonusPointService->add($gratitude, $request->validated());
+
         return response()->json(['message' => 'Bonus points added', 'point' => $point]);
     }
 
@@ -272,6 +285,7 @@ class GratitudeController extends Controller
         $point = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
         $updated = $this->bonusPointService->update($point, $gratitude, $request->validated());
+
         return response()->json(['message' => 'Bonus points updated', 'point' => $updated]);
     }
 
@@ -284,6 +298,7 @@ class GratitudeController extends Controller
             $request->integer('earned_point_id') ?: null,
             $request->integer('bonus_point_id') ?: null,
         );
+
         return response()->json(['message' => 'Points cancelled', 'cancellation' => $cancel]);
     }
 
@@ -291,6 +306,7 @@ class GratitudeController extends Controller
     {
         $point = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $this->earnedPointService->delete($point);
+
         return response()->json(['message' => 'Earned point deleted']);
     }
 
@@ -298,6 +314,7 @@ class GratitudeController extends Controller
     {
         $point = BonusPoint::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $this->bonusPointService->delete($point);
+
         return response()->json(['message' => 'Bonus point deleted']);
     }
 
@@ -305,6 +322,7 @@ class GratitudeController extends Controller
     {
         $cancel = Cancellation::where('gratitudeNumber', $gratitudeNumber)->findOrFail($id);
         $this->cancellationService->delete($cancel);
+
         return response()->json(['message' => 'Cancellation deleted']);
     }
 
@@ -324,14 +342,18 @@ class GratitudeController extends Controller
         $request->validate([
             'points' => 'required|numeric|min:1',
             'amount' => 'nullable|numeric',
-            'reason' => 'nullable|string'
+            'reason' => 'nullable|string',
+            'redemption_type' => 'nullable|string|in:journey,partner,other',
+            'journey_id' => 'nullable|integer|required_if:redemption_type,journey',
         ]);
-
-
 
         $result = $this->gratitudeService->redeemPoints($gratitudeNumber, $request->all(), $request->points);
 
-        if (!$result) {
+        if (is_array($result) && isset($result['error'])) {
+            return response()->json(['message' => $result['error']], 422);
+        }
+
+        if (! $result) {
             return response()->json(['message' => 'Insufficient points or invalid request.'], 400);
         }
 
@@ -341,7 +363,8 @@ class GratitudeController extends Controller
 
     public function apiShowRedemption($gratitudeNumber, $id)
     {
-        $redemption = \App\Models\Gratitude\RedeemPoints::with('details.source')->findOrFail($id);
+        $redemption = RedeemPoints::with('details.source')->findOrFail($id);
+
         return response()->json($redemption);
     }
 
@@ -349,20 +372,22 @@ class GratitudeController extends Controller
     {
         $request->validate([
             'amount' => 'nullable|numeric',
-            'reason' => 'nullable|string'
+            'reason' => 'nullable|string',
         ]);
 
         $redemption = GratitudeService::updateRedemption($id, $request->all());
         GratitudeService::syncAccountBalance($gratitudeNumber);
+
         return response()->json(['message' => 'Redemption updated', 'redemption' => $redemption]);
     }
 
     public function apiDeleteRedemption($gratitudeNumber, $id)
     {
         $success = GratitudeService::deleteRedemption($id);
-        if (!$success) {
+        if (! $success) {
             return response()->json(['message' => 'Failed to delete redemption'], 500);
         }
+
         return response()->json(['message' => 'Redemption removed securely']);
     }
 
@@ -371,11 +396,114 @@ class GratitudeController extends Controller
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
         GratitudeService::syncAccountBalance($gratitude->gratitudeNumber);
         $gratitude->refresh();
+
         return response()->json([
-            'message'        => 'Balance synced successfully.',
-            'useablePoints'  => $gratitude->useablePoints,
-            'totalPoints'    => $gratitude->totalPoints,
+            'message' => 'Balance synced successfully.',
+            'useablePoints' => $gratitude->useablePoints,
+            'totalPoints' => $gratitude->totalPoints,
         ]);
     }
 
+    private function attachCancellationHistory($earnedPoints, $bonusPoints, $cancellations): void
+    {
+        $pointsByKey = [];
+
+        foreach ($earnedPoints as $point) {
+            $point->setAttribute('cancellations_list', []);
+            $pointsByKey[EarnedPoint::class.'#'.$point->id] = $point;
+        }
+
+        foreach ($bonusPoints as $point) {
+            $point->setAttribute('cancellations_list', []);
+            $pointsByKey[BonusPoint::class.'#'.$point->id] = $point;
+        }
+
+        foreach ($cancellations as $cancellation) {
+            foreach (($cancellation->points_breakdown ?? []) as $allocation) {
+                $key = ($allocation['source_type'] ?? '').'#'.($allocation['source_id'] ?? '');
+                if (! isset($pointsByKey[$key])) {
+                    continue;
+                }
+
+                $list = $pointsByKey[$key]->getAttribute('cancellations_list') ?? [];
+                $list[] = [
+                    'id' => $cancellation->id,
+                    'date' => $cancellation->date,
+                    'description' => $cancellation->description,
+                    'points' => (int) ($allocation['points'] ?? $cancellation->points),
+                ];
+                $pointsByKey[$key]->setAttribute('cancellations_list', $list);
+            }
+        }
+    }
+
+    private function buildPointsHistory($earnedPoints, $bonusPoints, $cancellations, $redemptions)
+    {
+        $history = collect();
+
+        foreach ($earnedPoints as $point) {
+            $history->push($this->historyEntry('earned', $point->date ?? $point->created_at, $point->points, $point->description ?: 'Earned points', 'EarnedPoint', $point->id));
+
+            foreach (($point->redemptions ?? []) as $detail) {
+                $history->push($this->historyEntry('redemption', $detail->created_at, -1 * (int) $detail->points, $detail->redeemPoint?->reason ?: 'Point redemption', 'EarnedPoint', $point->id));
+            }
+
+            foreach (($point->cancellations_list ?? []) as $cancel) {
+                $history->push($this->historyEntry('cancellation', $cancel['date'] ?? null, -1 * (int) ($cancel['points'] ?? 0), $cancel['description'] ?: 'Point cancellation', 'EarnedPoint', $point->id));
+            }
+
+            if ((int) $point->expired_points > 0) {
+                $history->push($this->historyEntry('expiration', $point->expires_at, -1 * (int) $point->expired_points, 'Points expired', 'EarnedPoint', $point->id));
+            }
+        }
+
+        foreach ($bonusPoints as $point) {
+            $history->push($this->historyEntry('bonus', $point->date ?? $point->created_at, $point->points, $point->description ?: 'Bonus points', 'BonusPoint', $point->id));
+
+            foreach (($point->redemptions ?? []) as $detail) {
+                $history->push($this->historyEntry('redemption', $detail->created_at, -1 * (int) $detail->points, $detail->redeemPoint?->reason ?: 'Point redemption', 'BonusPoint', $point->id));
+            }
+
+            foreach (($point->cancellations_list ?? []) as $cancel) {
+                $history->push($this->historyEntry('cancellation', $cancel['date'] ?? null, -1 * (int) ($cancel['points'] ?? 0), $cancel['description'] ?: 'Point cancellation', 'BonusPoint', $point->id));
+            }
+
+            if ((int) $point->expired_points > 0) {
+                $history->push($this->historyEntry('expiration', $point->expires_at, -1 * (int) $point->expired_points, 'Points expired', 'BonusPoint', $point->id));
+            }
+        }
+
+        $allocatedCancellationIds = $cancellations
+            ->filter(fn ($cancel) => ! empty($cancel->points_breakdown))
+            ->pluck('id')
+            ->all();
+
+        foreach ($cancellations->whereNotIn('id', $allocatedCancellationIds) as $cancel) {
+            $history->push($this->historyEntry('cancellation', $cancel->date ?? $cancel->created_at, -1 * (int) $cancel->points, $cancel->description ?: 'Point cancellation', 'Cancellation', $cancel->id));
+        }
+
+        return $history
+            ->sortByDesc(fn ($entry) => $entry['sort_date'] ?? '')
+            ->values()
+            ->map(function ($entry) {
+                unset($entry['sort_date']);
+
+                return $entry;
+            });
+    }
+
+    private function historyEntry(string $type, mixed $date, int|float|null $points, string $description, string $sourceType, int|string|null $sourceId): array
+    {
+        $parsedDate = $date ? Carbon::parse($date) : null;
+
+        return [
+            'type' => $type,
+            'date' => $parsedDate?->toDateString(),
+            'sort_date' => $parsedDate?->toISOString(),
+            'points' => (int) ($points ?? 0),
+            'description' => $description,
+            'source_type' => $sourceType,
+            'source_id' => $sourceId,
+        ];
+    }
 }

@@ -30,7 +30,8 @@ watch(isOpen, (val) => {
 
 const calculatedValue = () => {
     const pts = Number(props.redemption.points || 0);
-    return (pts / props.pointsPerDollar).toFixed(2);
+    const rate = Number(props.redemption.points_breakdown?.points_per_dollar || props.pointsPerDollar || 35);
+    return (pts / rate).toFixed(2);
 };
 
 const submit = async () => {

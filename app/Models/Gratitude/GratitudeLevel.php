@@ -5,8 +5,8 @@ namespace App\Models\Gratitude;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
-use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class GratitudeLevel extends Model
 {
@@ -23,6 +23,7 @@ class GratitudeLevel extends Model
         'max_points',
         'status',
         'redemption_points_per_dollar',
+        'partner_points_per_dollar',
         'earned_expire_days',
         'bonus_expire_days',
         'level_interval_years',
@@ -41,6 +42,8 @@ class GratitudeLevel extends Model
     protected $casts = [
         'level_rules' => 'array',
         'status' => 'boolean',
+        'redemption_points_per_dollar' => 'decimal:2',
+        'partner_points_per_dollar' => 'decimal:2',
         'earned_expire_days' => 'integer',
         'bonus_expire_days' => 'integer',
         'level_interval_years' => 'integer',

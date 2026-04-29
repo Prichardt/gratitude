@@ -21,11 +21,22 @@ const form = ref({
     cancellation_points: 0,
 });
 
+const remainingPoints = computed(() => {
+    if (props.point.remaining_points !== undefined && props.point.remaining_points !== null) {
+        return Math.max(0, Number(props.point.remaining_points || 0));
+    }
+
+    return Math.max(
+        0,
+        Number(props.point.points || 0) - Number(props.point.redeemed_points || 0) - Number(props.point.cancelled_points || 0),
+    );
+});
+
 const open = () => {
     form.value = {
         date: new Date().toISOString().split('T')[0],
         cancellation_reason: '',
-        cancellation_points: props.point.points,
+        cancellation_points: remainingPoints.value,
     };
     isOpen.value = true;
 };
@@ -82,7 +93,7 @@ const formatNum = (n: any) => new Intl.NumberFormat('en-US').format(Number(n || 
                     <div class="flex items-start gap-3 bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
                         <AlertTriangle class="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                         <p class="text-xs text-amber-800 dark:text-amber-300 font-medium">
-                            This will mark the entry as cancelled and deduct <strong>{{ formatNum(point.points) }} pts</strong> from the account balance.
+                            This will deduct up to <strong>{{ formatNum(remainingPoints) }} pts</strong> from the remaining balance on this entry.
                         </p>
                     </div>
 
@@ -94,7 +105,7 @@ const formatNum = (n: any) => new Intl.NumberFormat('en-US').format(Number(n || 
                         </div>
                         <div class="bg-amber-50/70 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-200/50 dark:border-amber-800/50">
                             <p class="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider">Points</p>
-                            <p class="text-lg font-bold text-amber-700 dark:text-amber-300 mt-0.5">{{ formatNum(point.points) }} pts</p>
+                            <p class="text-lg font-bold text-amber-700 dark:text-amber-300 mt-0.5">{{ formatNum(remainingPoints) }} pts</p>
                         </div>
                     </div>
 
@@ -110,7 +121,7 @@ const formatNum = (n: any) => new Intl.NumberFormat('en-US').format(Number(n || 
                         </div>
                         <div>
                             <Label class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Points to Deduct</Label>
-                            <Input type="number" v-model.number="form.cancellation_points" required min="1" class="mt-1.5" />
+                            <Input type="number" v-model.number="form.cancellation_points" required min="1" :max="remainingPoints" class="mt-1.5" />
                         </div>
                         <div class="flex justify-end space-x-3 pt-2 border-t border-border/50">
                             <Button type="button" variant="outline" class="h-9 px-5 font-semibold shadow-sm" @click="isOpen = false">Close</Button>

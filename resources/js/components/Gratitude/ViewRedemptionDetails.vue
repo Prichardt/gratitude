@@ -22,7 +22,8 @@ const formatDate = (val: string | null) => {
 const computedValue = () => {
     const amount = Number(props.redemption.amount);
     const points = Number(props.redemption.points);
-    return amount > 0 ? amount.toFixed(2) : (points / props.pointsPerDollar).toFixed(2);
+    const rate = Number(props.redemption.points_breakdown?.points_per_dollar || props.pointsPerDollar || 35);
+    return amount > 0 ? amount.toFixed(2) : (points / rate).toFixed(2);
 };
 
 const sourceLabel = (detail: any) => {

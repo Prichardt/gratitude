@@ -10,6 +10,7 @@ const props = defineProps({
     gratitudeNumber: { type: String, required: true },
     usablePoints: { type: Number, default: 0 },
     pointsPerDollar: { type: Number, default: 35 },
+    partnerPointsPerDollar: { type: Number, default: 35 },
     level: { type: String, default: 'Explorer' }
 });
 
@@ -18,16 +19,24 @@ const isOpen = ref(false);
 const isSubmitting = ref(false);
 
 const form = ref({
+    redemption_type: 'partner',
+    journey_id: '' as string | number,
     points: 0,
     amount: '' as string | number,
     reason: 'Partner Redemption'
 });
 
+const selectedRate = computed(() => {
+    return form.value.redemption_type === 'partner'
+        ? props.partnerPointsPerDollar
+        : props.pointsPerDollar;
+});
+
 // Computed estimated value based on level rate
 const estimatedValue = computed(() => {
     const pts = Number(form.value.points) || 0;
-    if (pts <= 0 || !props.pointsPerDollar) return '0.00';
-    return (pts / props.pointsPerDollar).toFixed(2);
+    if (pts <= 0 || !selectedRate.value) return '0.00';
+    return (pts / selectedRate.value).toFixed(2);
 });
 
 const maxRedeemable = computed(() => props.usablePoints);
@@ -46,8 +55,12 @@ const submit = async () => {
             points: form.value.points,
             amount: form.value.amount || estimatedValue.value,
             reason: form.value.reason,
+            redemption_type: form.value.redemption_type,
+            journey_id: form.value.redemption_type === 'journey' ? form.value.journey_id : null,
         });
         isOpen.value = false;
+        form.value.redemption_type = 'partner';
+        form.value.journey_id = '';
         form.value.points = 0;
         form.value.amount = '';
         form.value.reason = 'Partner Redemption';
@@ -86,11 +99,25 @@ const submit = async () => {
                     </div>
                     <div class="text-right">
                         <p class="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase tracking-wider">Rate ({{ level }})</p>
-                        <p class="text-sm font-bold text-amber-800 dark:text-amber-200">{{ pointsPerDollar }} pts = $1</p>
+                        <p class="text-sm font-bold text-amber-800 dark:text-amber-200">{{ selectedRate }} pts = $1</p>
                     </div>
                 </div>
 
                 <form @submit.prevent="submit" class="p-6 space-y-5">
+
+                    <div class="space-y-1.5">
+                        <Label class="text-xs font-semibold text-foreground/80">Redemption Type</Label>
+                        <select v-model="form.redemption_type" class="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                            <option value="partner">Partner Purchase</option>
+                            <option value="journey">Journey</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+
+                    <div v-if="form.redemption_type === 'journey'" class="space-y-1.5">
+                        <Label class="text-xs font-semibold text-foreground/80">Journey ID</Label>
+                        <Input type="number" v-model="form.journey_id" required class="h-10" placeholder="Journey ID" />
+                    </div>
 
                     <div class="space-y-1.5">
                         <div class="flex items-center justify-between">

@@ -31,6 +31,7 @@ watch(isOpen, (newVal) => {
             ...props.level,
             earned_expire_days: props.level.earned_expire_days ?? 730,
             bonus_expire_days: props.level.bonus_expire_days ?? 730,
+            partner_points_per_dollar: props.level.partner_points_per_dollar ?? props.level.redemption_points_per_dollar ?? 35,
         };
         levelImage.value = null;
         levelIcon.value = null;
@@ -73,6 +74,7 @@ const submit = async () => {
         }
         formData.append('status', String(form.value.status));
         formData.append('redemption_points_per_dollar', String(form.value.redemption_points_per_dollar || 35));
+        formData.append('partner_points_per_dollar', String(form.value.partner_points_per_dollar || form.value.redemption_points_per_dollar || 35));
         formData.append('earned_expire_days', String(form.value.earned_expire_days || 730));
         formData.append('bonus_expire_days', String(form.value.bonus_expire_days || 730));
 
@@ -120,10 +122,15 @@ const submit = async () => {
                             <Label>Max Points (Leave blank for ∞)</Label>
                             <Input type="number" v-model="form.max_points" />
                         </div>
-                        <div class="col-span-2">
-                            <Label>Points Per Dollar (Redemption Rate)</Label>
+                        <div>
+                            <Label>Journey Points Per Dollar</Label>
                             <Input type="number" step="0.01" min="1" v-model="form.redemption_points_per_dollar" required />
-                            <p class="text-xs text-muted-foreground mt-1">How many points equal $1 in value. Explorer=35, Globetrotter=30, Jetsetter=25</p>
+                            <p class="text-xs text-muted-foreground mt-1">Points needed for $1 on journey redemptions.</p>
+                        </div>
+                        <div>
+                            <Label>Partner Points Per Dollar</Label>
+                            <Input type="number" step="0.01" min="1" v-model="form.partner_points_per_dollar" required />
+                            <p class="text-xs text-muted-foreground mt-1">Points needed for $1 with partners.</p>
                         </div>
                         <div>
                             <Label>Earned Points Expire After (Days)</Label>

@@ -4,13 +4,16 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     /**
      * Run the migrations.
      */
     public function up(): void
     {
-        Schema::create('bonus_points', function (Blueprint $table) {
+        $remainingPointsExpression = 'CASE WHEN COALESCE(points, 0) - COALESCE(redeemed_points, 0) - COALESCE(cancelled_points, 0) > 0 THEN COALESCE(points, 0) - COALESCE(redeemed_points, 0) - COALESCE(cancelled_points, 0) ELSE 0 END';
+
+        Schema::create('bonus_points', function (Blueprint $table) use ($remainingPointsExpression) {
             $table->id();
             $table->bigInteger('old_id')->nullable();
             $table->unsignedInteger('user_id')->nullable();
@@ -22,7 +25,8 @@ return new class extends Migration {
             $table->integer('points')->default(0);
             $table->json('points_breakdown')->nullable(); //
             $table->integer('redeemed_points')->default(0);
-            $table->integer('remaining_points')->virtualAs('points - redeemed_points');
+            $table->integer('cancelled_points')->default(0);
+            $table->integer('remaining_points')->virtualAs($remainingPointsExpression);
             $table->text('redemption_history')->nullable();
             $table->string('amount')->nullable();
             $table->string('description')->nullable();
@@ -31,10 +35,7 @@ return new class extends Migration {
             $table->softDeletes();
             $table->timestamps();
 
-
-            $table->timestamp('usable_date')
-                ->nullable()
-                ->virtualAs('COALESCE(TIMESTAMP(`date`), `created_at`)');
+            $table->timestamp('usable_date')->nullable();
 
             $table->timestamp('expires_at')->nullable();
         });

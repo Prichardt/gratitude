@@ -2,8 +2,6 @@
 
 namespace App\Models\Gratitude;
 
-
-use App\Models\Gratitude\RedeemPointsDetails;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -30,6 +28,7 @@ class BonusPoint extends Model
         'type',
         'points',
         'redeemed_points',
+        'cancelled_points',
         'redemption_history',
         'amount',
         'description',
@@ -39,13 +38,38 @@ class BonusPoint extends Model
         'expires_at_manual',
     ];
 
+    protected $appends = [
+        'remaining_points',
+        'expired_points',
+    ];
+
     protected $casts = [
         'usable_date' => 'date',
         'expires_at' => 'datetime',
         'expires_at_manual' => 'boolean',
         'date' => 'date',
         'redemption_history' => 'array',
+        'points' => 'integer',
+        'redeemed_points' => 'integer',
+        'cancelled_points' => 'integer',
     ];
+
+    public function getRemainingPointsAttribute($value = null): int
+    {
+        return max(
+            0,
+            (int) $this->points - (int) $this->redeemed_points - (int) $this->cancelled_points
+        );
+    }
+
+    public function getExpiredPointsAttribute(): int
+    {
+        if (! $this->expires_at || $this->expires_at->isFuture()) {
+            return 0;
+        }
+
+        return $this->remaining_points;
+    }
 
     public function user()
     {

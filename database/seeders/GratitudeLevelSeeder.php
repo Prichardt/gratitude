@@ -12,18 +12,19 @@ class GratitudeLevelSeeder extends Seeder
         // ── Levels ────────────────────────────────────────────────────────────
         $levels = [
             [
-                'name'                      => 'Explorer',
-                'min_points'                => 0,
-                'max_points'                => 15000,
-                'status'                    => true,
+                'name' => 'Explorer',
+                'min_points' => 0,
+                'max_points' => 15000,
+                'status' => true,
                 'redemption_points_per_dollar' => 35,
-                'earned_expire_days'        => 730,
-                'bonus_expire_days'         => 730,
-                'level_interval_years'      => 2,
-                'jetsetter_min_journeys'    => null,
+                'partner_points_per_dollar' => 35,
+                'earned_expire_days' => 730,
+                'bonus_expire_days' => 730,
+                'level_interval_years' => 2,
+                'jetsetter_min_journeys' => null,
                 'jetsetter_min_journey_days' => null,
-                'stay_active_rules'         => 'Accumulate at least 1 point within your 2-year membership interval to retain Explorer status.',
-                'level_rules'               => [
+                'stay_active_rules' => 'Accumulate at least 1 point within your 2-year membership interval to retain Explorer status.',
+                'level_rules' => [
                     [
                         'keep_level' => 'Accumulate at least 1 point within your 2-year membership interval to retain Explorer status.',
                         'points_to_retain' => 1,
@@ -31,53 +32,55 @@ class GratitudeLevelSeeder extends Seeder
                     [
                         'downgrade_to' => null, // No downgrade from Explorer
                         'points_to_downgrade' => 0,
-                    ]
+                    ],
                 ],
-                'terms_conditions'          => 'Gratitude Rewards is subject to program terms. Points have no cash value outside the program. The program operator reserves the right to modify or terminate the program with reasonable notice. Points are non-transferable.',
-                'level_terms_conditions'    => 'Explorer members earn and redeem points on eligible experiences. Journey payment using points is not available at the Explorer level. To access journey payment benefits, accumulate enough earned points to reach Globetrotter status.',
-                'level_image'               => null,
-                'level_icon'                => null,
+                'terms_conditions' => 'Gratitude Rewards is subject to program terms. Points have no cash value outside the program. The program operator reserves the right to modify or terminate the program with reasonable notice. Points are non-transferable.',
+                'level_terms_conditions' => 'Explorer members earn and redeem points on eligible experiences. Journey payment using points is not available at the Explorer level. To access journey payment benefits, accumulate enough earned points to reach Globetrotter status.',
+                'level_image' => null,
+                'level_icon' => null,
             ],
             [
-                'name'                      => 'Globetrotter',
-                'min_points'                => 15001,
-                'max_points'                => 30000,
-                'status'                    => true,
+                'name' => 'Globetrotter',
+                'min_points' => 15001,
+                'max_points' => 30000,
+                'status' => true,
                 'redemption_points_per_dollar' => 30,
-                'earned_expire_days'        => 730,
-                'bonus_expire_days'         => 730,
-                'level_interval_years'      => 2,
-                'jetsetter_min_journeys'    => null,
+                'partner_points_per_dollar' => 30,
+                'earned_expire_days' => 730,
+                'bonus_expire_days' => 730,
+                'level_interval_years' => 2,
+                'jetsetter_min_journeys' => null,
                 'jetsetter_min_journey_days' => null,
-                'stay_active_rules'         => 'Earn at least 15,001 points within your 2-year membership interval to retain Globetrotter status.',
-                'level_rules'               => [
+                'stay_active_rules' => 'Earn at least 15,001 points within your 2-year membership interval to retain Globetrotter status.',
+                'level_rules' => [
                     [
                         'keep_level' => 'Earn at least 15,001 points within your 2-year membership interval to retain Globetrotter status.',
                         'points_to_earn' => 15001,
                     ],
                     [
                         'downgrade_to' => 'Explorer',
-                    ]
+                    ],
                 ],
-                'terms_conditions'          => 'Gratitude Rewards is subject to program terms. Points have no cash value outside the program. The program operator reserves the right to modify or terminate the program with reasonable notice. Points are non-transferable.',
-                'level_terms_conditions'    => 'Globetrotter members may use points to pay for journeys and experiences. Complimentary upgrades are subject to availability at the time of check-in and are not guaranteed. Failure to accumulate the required points within the membership interval will result in downgrade to Explorer.',
-                'level_image'               => null,
-                'level_icon'                => null,
+                'terms_conditions' => 'Gratitude Rewards is subject to program terms. Points have no cash value outside the program. The program operator reserves the right to modify or terminate the program with reasonable notice. Points are non-transferable.',
+                'level_terms_conditions' => 'Globetrotter members may use points to pay for journeys and experiences. Complimentary upgrades are subject to availability at the time of check-in and are not guaranteed. Failure to accumulate the required points within the membership interval will result in downgrade to Explorer.',
+                'level_image' => null,
+                'level_icon' => null,
             ],
             [
-                'name'                      => 'Jetsetter',
-                'min_points'                => 30001,
-                'max_points'                => null,
-                'status'                    => true,
+                'name' => 'Jetsetter',
+                'min_points' => 30001,
+                'max_points' => null,
+                'status' => true,
                 'redemption_points_per_dollar' => 25,
-                'earned_expire_days'        => 730,
-                'bonus_expire_days'         => 730,
-                'level_interval_years'      => 2,
+                'partner_points_per_dollar' => 25,
+                'earned_expire_days' => 730,
+                'bonus_expire_days' => 730,
+                'level_interval_years' => 2,
                 // Must complete at least 2 journeys of more than 5 days to retain Jetsetter
-                'jetsetter_min_journeys'    => 2,
+                'jetsetter_min_journeys' => 2,
                 'jetsetter_min_journey_days' => 5,
-                'stay_active_rules'         => 'Earn at least 30,001 points AND complete at least 2 journeys of more than 5 days within your 2-year membership interval to retain Jetsetter status.',
-                'level_rules'               => [
+                'stay_active_rules' => 'Earn at least 30,001 points AND complete at least 2 journeys of more than 5 days within your 2-year membership interval to retain Jetsetter status.',
+                'level_rules' => [
                     [
                         'keep_level' => 'Earn at least 30,001 points AND complete at least 2 journeys of more than 5 days within your 2-year membership interval to retain Jetsetter status.',
                         'points_to_earn' => 30001,
@@ -88,12 +91,12 @@ class GratitudeLevelSeeder extends Seeder
                         'downgrade_to' => 'Globetrotter',
                         'journeys_to_downgrade' => 1, // If they have less than 2 journeys of more than 5 days, they downgrade even if they have enough points
                         'journey_days_to_downgrade' => 5,
-                    ]
+                    ],
                 ],
-                'terms_conditions'          => 'Gratitude Rewards is subject to program terms. Points have no cash value outside the program. The program operator reserves the right to modify or terminate the program with reasonable notice. Points are non-transferable.',
-                'level_terms_conditions'    => 'Jetsetter status requires both a points threshold (30,001+ earned points) AND a travel activity threshold (minimum 2 journeys of more than 5 days) within the membership interval. Failure to meet either condition at interval expiry will result in downgrade to Globetrotter. Discount applies to selected services as published on the program website.',
-                'level_image'               => null,
-                'level_icon'                => null,
+                'terms_conditions' => 'Gratitude Rewards is subject to program terms. Points have no cash value outside the program. The program operator reserves the right to modify or terminate the program with reasonable notice. Points are non-transferable.',
+                'level_terms_conditions' => 'Jetsetter status requires both a points threshold (30,001+ earned points) AND a travel activity threshold (minimum 2 journeys of more than 5 days) within the membership interval. Failure to meet either condition at interval expiry will result in downgrade to Globetrotter. Discount applies to selected services as published on the program website.',
+                'level_image' => null,
+                'level_icon' => null,
             ],
         ];
 

@@ -20,8 +20,11 @@ const columns = [
     { key: 'gratitudeNumber', label: 'Gratitude Number', sortable: true },
     { key: 'level', label: 'Level', sortable: true },
     { key: 'totalPoints', label: 'Total Points', sortable: true, align: 'right' as const },
+    { key: 'totalRemainingPoints', label: 'Remaining', sortable: true, align: 'right' as const },
     { key: 'useablePoints', label: 'Usable Points', sortable: true, align: 'right' as const },
     { key: 'pending_points', label: 'Pending Points', sortable: true, align: 'right' as const },
+    { key: 'totalRedeemedPoints', label: 'Redeemed', sortable: true, align: 'right' as const },
+    { key: 'totalCancelledPoints', label: 'Cancelled', sortable: true, align: 'right' as const },
     { key: 'totalExpiredPoints', label: 'Expired Points', sortable: true, align: 'right' as const },
     { key: 'last_activity_at', label: 'Last Activity', sortable: true },
     { key: 'status', label: 'Status', sortable: true, align: 'center' as const },
@@ -149,8 +152,17 @@ const syncBalance = async (gratitudeNumber: string) => {
                     <template #cell-useablePoints="{ row }">
                         {{ formatNumber(row.useablePoints) }}
                     </template>
+                    <template #cell-totalRemainingPoints="{ row }">
+                        {{ formatNumber(row.totalRemainingPoints) }}
+                    </template>
                     <template #cell-pending_points="{ row }">
                         {{ formatNumber(row.pending_points) }}
+                    </template>
+                    <template #cell-totalRedeemedPoints="{ row }">
+                        {{ formatNumber(row.totalRedeemedPoints) }}
+                    </template>
+                    <template #cell-totalCancelledPoints="{ row }">
+                        {{ formatNumber(row.totalCancelledPoints) }}
                     </template>
                     <template #cell-totalExpiredPoints="{ row }">
                         {{ formatNumber(row.totalExpiredPoints) }}

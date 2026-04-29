@@ -11,7 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('earned_points', function (Blueprint $table) {
+        $remainingPointsExpression = 'CASE WHEN COALESCE(points, 0) - COALESCE(redeemed_points, 0) - COALESCE(cancelled_points, 0) > 0 THEN COALESCE(points, 0) - COALESCE(redeemed_points, 0) - COALESCE(cancelled_points, 0) ELSE 0 END';
+
+        Schema::create('earned_points', function (Blueprint $table) use ($remainingPointsExpression) {
             $table->id();
             $table->bigInteger('old_id')->nullable();
             $table->unsignedInteger('user_id')->nullable();
@@ -20,7 +22,8 @@ return new class extends Migration
             $table->integer('points')->default(0);
             $table->json('points_breakdown')->nullable(); // {"points": 100, "rate": 0.5, "amount": 200, "entry_date": "2026-12-31", "usable_date": "2026-12-31", "journey_id": 123, "journey_number": "J123", "journey_type": "curated", "journey_name": "Testing Name", "journey_end_date": "2026-12-31", "journey_start_date": "2026-12-31", "expires_at": "2026-12-31"}
             $table->integer('redeemed_points')->default(0);
-            $table->integer('remaining_points')->virtualAs('points - redeemed_points');
+            $table->integer('cancelled_points')->default(0);
+            $table->integer('remaining_points')->virtualAs($remainingPointsExpression);
             $table->text('redemption_history')->nullable();
             $table->decimal('amount', 10, 2)->nullable();
             $table->date('date')->nullable();

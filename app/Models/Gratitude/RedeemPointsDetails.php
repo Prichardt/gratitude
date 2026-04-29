@@ -2,10 +2,10 @@
 
 namespace App\Models\Gratitude;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Spatie\Activitylog\Traits\LogsActivity;
+use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class RedeemPointsDetails extends Model
 {
@@ -36,7 +36,7 @@ class RedeemPointsDetails extends Model
      */
     public function redeemPoint()
     {
-        return $this->belongsTo(RedeemPoints::class);
+        return $this->belongsTo(RedeemPoints::class, 'redeem_id');
     }
 
     /**

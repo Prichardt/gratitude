@@ -65,7 +65,8 @@ onMounted(() => {
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Min Points</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Max Points</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Pts / $</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Journey Pts / $</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Partner Pts / $</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Earned Expiry</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Bonus Expiry</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
@@ -78,6 +79,7 @@ onMounted(() => {
                             <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">{{ level.min_points }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">{{ level.max_points || '∞' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">{{ level.redemption_points_per_dollar || 35 }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">{{ level.partner_points_per_dollar || level.redemption_points_per_dollar || 35 }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">{{ level.earned_expire_days || 730 }} days</td>
                             <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">{{ level.bonus_expire_days || 730 }} days</td>
                             <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">
@@ -95,7 +97,7 @@ onMounted(() => {
                             </td>
                         </tr>
                         <tr v-if="levels.length === 0">
-                            <td colspan="8" class="px-6 py-4 text-center text-muted-foreground">No levels established yet.</td>
+                            <td colspan="9" class="px-6 py-4 text-center text-muted-foreground">No levels established yet.</td>
                         </tr>
                     </tbody>
                 </table>

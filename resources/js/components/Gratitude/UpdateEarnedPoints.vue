@@ -17,6 +17,7 @@ const toDateInput = (val: string | null | undefined) => val ? val.split('T')[0] 
 
 const form = ref({
     date: toDateInput(props.point.date),
+    journey_id: props.point.journey_id,
     category: props.point.category,
     points: props.point.points,
     amount: props.point.amount,
@@ -31,6 +32,7 @@ watch(isOpen, (open) => {
 
     form.value = {
         date: toDateInput(props.point.date),
+        journey_id: props.point.journey_id,
         category: props.point.category,
         points: props.point.points,
         amount: props.point.amount,
@@ -61,6 +63,10 @@ const submit = async () => {
                     <div>
                         <Label>Date</Label>
                         <Input type="date" v-model="form.date" required />
+                    </div>
+                    <div>
+                        <Label>Journey ID</Label>
+                        <Input type="number" v-model="form.journey_id" required />
                     </div>
                     <div>
                         <Label>Category</Label>

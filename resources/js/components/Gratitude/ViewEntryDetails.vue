@@ -16,6 +16,18 @@ const openDialog = () => {
 const closeDialog = () => {
     isOpen.value = false;
 };
+
+const cancelledPoints = () => Number(props.item.cancelled_points || 0);
+const remainingPoints = () => {
+    if (props.item.remaining_points !== undefined && props.item.remaining_points !== null) {
+        return Math.max(0, Number(props.item.remaining_points || 0));
+    }
+
+    return Math.max(
+        0,
+        Number(props.item.points || 0) - Number(props.item.redeemed_points || 0) - cancelledPoints(),
+    );
+};
 </script>
 
 <template>
@@ -46,16 +58,20 @@ const closeDialog = () => {
                                 <div class="font-medium text-sm mt-0.5 capitalize">{{ item.rowType || 'Entry' }}</div>
                             </div>
                             <div class="bg-muted/30 p-3 rounded-lg border border-border/50">
-                                <span class="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Points</span>
+                                <span class="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Total Points</span>
                                 <div class="font-bold text-sm mt-0.5" :class="item.points < 0 ? 'text-destructive' : 'text-primary'">{{ item.points }} pts</div>
                             </div>
                             <div class="bg-amber-50/60 dark:bg-amber-950/20 p-3 rounded-lg border border-amber-200/50 dark:border-amber-800/30">
                                 <span class="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider">Redeemed</span>
                                 <div class="font-bold text-sm mt-0.5 text-amber-600 dark:text-amber-400">{{ item.redeemed_points || 0 }} pts</div>
                             </div>
+                            <div class="bg-red-50/60 dark:bg-red-950/20 p-3 rounded-lg border border-red-200/50 dark:border-red-800/30">
+                                <span class="text-[10px] text-red-600 dark:text-red-400 font-bold uppercase tracking-wider">Cancelled</span>
+                                <div class="font-bold text-sm mt-0.5 text-red-600 dark:text-red-400">{{ cancelledPoints() }} pts</div>
+                            </div>
                             <div class="bg-green-50/60 dark:bg-green-950/20 p-3 rounded-lg border border-green-200/50 dark:border-green-800/30">
                                 <span class="text-[10px] text-green-600 dark:text-green-400 font-bold uppercase tracking-wider">Remaining</span>
-                                <div class="font-bold text-sm mt-0.5 text-green-600 dark:text-green-400">{{ (item.points || 0) - (item.redeemed_points || 0) }} pts</div>
+                                <div class="font-bold text-sm mt-0.5 text-green-600 dark:text-green-400">{{ remainingPoints() }} pts</div>
                             </div>
                             <div class="bg-muted/30 p-3 rounded-lg border border-border/50">
                                 <span class="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Date</span>
@@ -69,6 +85,30 @@ const closeDialog = () => {
                                 <span class="text-[10px] text-orange-600 dark:text-orange-400 font-bold uppercase tracking-wider">Expires On</span>
                                 <div class="font-medium text-sm mt-0.5 text-orange-700 dark:text-orange-300">{{ new Date(item.displayExpiresOn || item.expires_at).toISOString().split('T')[0] }}</div>
                             </div>
+                        </div>
+                    </div>
+
+                    <div v-if="item.cancellationsList && item.cancellationsList.length > 0">
+                        <h3 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                            Cancellation History
+                        </h3>
+                        <div class="border border-border/50 rounded-lg overflow-hidden">
+                            <table class="min-w-full divide-y divide-border/50">
+                                <thead class="bg-muted/30">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Date</th>
+                                        <th class="px-4 py-2 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Reason</th>
+                                        <th class="px-4 py-2 text-right text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Points</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border/50 bg-card">
+                                    <tr v-for="cancel in item.cancellationsList" :key="cancel.id" class="hover:bg-muted/20 transition-colors">
+                                        <td class="px-4 py-2.5 text-xs text-foreground/70 whitespace-nowrap">{{ cancel.date ? new Date(cancel.date).toISOString().split('T')[0] : '—' }}</td>
+                                        <td class="px-4 py-2.5 text-xs text-foreground/80">{{ cancel.description }}</td>
+                                        <td class="px-4 py-2.5 text-xs font-bold text-red-600 dark:text-red-400 text-right whitespace-nowrap">-{{ cancel.points }} pts</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 

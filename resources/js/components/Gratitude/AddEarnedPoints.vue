@@ -61,11 +61,8 @@ const submit = async () => {
                     
                     <!-- Journey -->
                     <div class="space-y-1.5">
-                        <Label class="text-xs font-semibold text-foreground/80">Journey</Label>
-                        <select v-model="form.journey_id" class="w-full flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-foreground">
-                            <option value="" disabled>Select Journey</option>
-                            <!-- Options populate here -->
-                        </select>
+                        <Label class="text-xs font-semibold text-foreground/80">Journey ID</Label>
+                        <Input type="number" v-model="form.journey_id" required class="h-10" placeholder="Journey ID" />
                     </div>
 
                     <!-- Category -->

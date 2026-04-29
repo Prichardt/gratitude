@@ -348,7 +348,7 @@ defineExpose({
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-border/70 bg-background">
-                    <tr v-for="row in paginatedRows" :key="row.id">
+                    <tr v-for="row in paginatedRows" :key="String(row.id)">
                         <td
                             v-for="column in visibleColumns"
                             :key="`${row.id}-${column.key}`"

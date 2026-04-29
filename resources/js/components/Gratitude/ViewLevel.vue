@@ -102,10 +102,19 @@ watch(isOpen, (newVal) => {
                     <div>
                         <span
                             class="text-xs font-semibold text-muted-foreground uppercase"
-                            >Points Per Dollar</span
+                            >Journey Points Per Dollar</span
                         >
                         <div class="mt-1 text-base font-medium">
                             {{ level.redemption_points_per_dollar || 35 }} pts = $1
+                        </div>
+                    </div>
+                    <div>
+                        <span
+                            class="text-xs font-semibold text-muted-foreground uppercase"
+                            >Partner Points Per Dollar</span
+                        >
+                        <div class="mt-1 text-base font-medium">
+                            {{ level.partner_points_per_dollar || level.redemption_points_per_dollar || 35 }} pts = $1
                         </div>
                     </div>
                     <div>

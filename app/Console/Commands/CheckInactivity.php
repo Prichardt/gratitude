@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
+use App\Models\Gratitude\Gratitude;
 use App\Services\Gratitude\TierService;
-use App\Models\User;
+use Illuminate\Console\Command;
 
 class CheckInactivity extends Command
 {
@@ -28,12 +28,12 @@ class CheckInactivity extends Command
     public function handle(TierService $tierService)
     {
         $this->info('Starting inactivity checks...');
-        
-        $users = User::all();
+
+        $gratitudes = Gratitude::whereNotNull('gratitudeNumber')->get();
         $inactiveCount = 0;
 
-        foreach ($users as $user) {
-            if ($tierService->checkInactivity($user->id)) {
+        foreach ($gratitudes as $gratitude) {
+            if ($tierService->checkInactivity($gratitude->gratitudeNumber)) {
                 $inactiveCount++;
             }
         }

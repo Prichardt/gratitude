@@ -2,12 +2,11 @@
 
 namespace App\Models\Gratitude;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\User;
-use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
-use App\Models\Gratitude\PointRedemption;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class EarnedPoint extends Model
 {
@@ -27,6 +26,7 @@ class EarnedPoint extends Model
         'points',
         'points_breakdown',
         'redeemed_points',
+        'cancelled_points',
         'redemption_history',
         'amount',
         'date',
@@ -36,7 +36,12 @@ class EarnedPoint extends Model
         'usable_date',
         'expires_at',
         'expires_at_manual',
-        'project_data'
+        'project_data',
+    ];
+
+    protected $appends = [
+        'remaining_points',
+        'expired_points',
     ];
 
     protected $casts = [
@@ -47,7 +52,27 @@ class EarnedPoint extends Model
         'redemption_history' => 'array',
         'points_breakdown' => 'array',
         'project_data' => 'array',
+        'points' => 'integer',
+        'redeemed_points' => 'integer',
+        'cancelled_points' => 'integer',
     ];
+
+    public function getRemainingPointsAttribute($value = null): int
+    {
+        return max(
+            0,
+            (int) $this->points - (int) $this->redeemed_points - (int) $this->cancelled_points
+        );
+    }
+
+    public function getExpiredPointsAttribute(): int
+    {
+        if (! $this->expires_at || $this->expires_at->isFuture()) {
+            return 0;
+        }
+
+        return $this->remaining_points;
+    }
 
     public function user()
     {

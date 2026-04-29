@@ -2,22 +2,20 @@
 
 namespace App\Services\Gratitude;
 
-use App\Models\Gratitude\Gratitude;
-use App\Models\Gratitude\EarnedPoint;
 use App\Models\Gratitude\BonusPoint;
+use App\Models\Gratitude\EarnedPoint;
+use App\Models\Gratitude\Gratitude;
 use App\Models\Gratitude\RedeemPoints;
 use App\Models\Gratitude\RedeemPointsDetails;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
-use Carbon\CarbonInterface;
 use Exception;
+use Illuminate\Support\Facades\DB;
 
 class PointService
 {
     public function __construct(
         protected PointExpiryService $pointExpiryService
-    ) {
-    }
+    ) {}
 
     /**
      * Posts pending tier points for a gratitude account.
@@ -27,12 +25,12 @@ class PointService
     {
         return EarnedPoint::create([
             'gratitudeNumber' => $gratitudeNumber,
-            'journey_id'      => $journeyId,
-            'points'          => $points,
-            'usable_date'     => $usableDate,
-            'status'          => 'pending',
-            'amount'          => $amount,
-            'description'     => $description,
+            'journey_id' => $journeyId,
+            'points' => $points,
+            'usable_date' => $usableDate,
+            'status' => 'pending',
+            'amount' => $amount,
+            'description' => $description,
         ]);
     }
 
@@ -49,7 +47,7 @@ class PointService
             $level = $this->resolveLevelForPoint($point->gratitudeNumber);
 
             $point->update([
-                'status'     => 'active',
+                'status' => 'active',
                 'expires_at' => $this->pointExpiryService->calculateEarnedExpiry(
                     Carbon::parse($point->usable_date),
                     $level
@@ -69,12 +67,12 @@ class PointService
 
         return BonusPoint::create([
             'gratitudeNumber' => $gratitudeNumber,
-            'points'          => $points,
-            'date'            => Carbon::today(),
-            'status'          => true,
-            'expires_at'      => $this->pointExpiryService->calculateBonusExpiry(Carbon::today(), $level),
-            'category'        => $category,
-            'description'     => $description,
+            'points' => $points,
+            'date' => Carbon::today(),
+            'status' => true,
+            'expires_at' => $this->pointExpiryService->calculateBonusExpiry(Carbon::today(), $level),
+            'category' => $category,
+            'description' => $description,
         ]);
     }
 
@@ -85,7 +83,7 @@ class PointService
     public function redeemPoints(string $gratitudeNumber, $pointsToRedeem, $reason = null, $userId = null)
     {
         if ($pointsToRedeem <= 0) {
-            throw new Exception("Points to redeem must be greater than zero.");
+            throw new Exception('Points to redeem must be greater than zero.');
         }
 
         return DB::transaction(function () use ($gratitudeNumber, $pointsToRedeem, $reason, $userId) {
@@ -94,17 +92,17 @@ class PointService
             $totalAvailable = $allPoints->sum('remaining_points');
 
             if ($totalAvailable < $pointsToRedeem) {
-                throw new Exception("Insufficient active points available for redemption.");
+                throw new Exception('Insufficient active points available for redemption.');
             }
 
             // Create the master redemption record first
             $redemption = RedeemPoints::create([
                 'gratitudeNumber' => $gratitudeNumber,
-                'user_id'         => $userId,
-                'points'          => $pointsToRedeem,
-                'amount'          => 0, // caller can update after
-                'reason'          => $reason ?? 'Point Redemption',
-                'status'          => 'approved',
+                'user_id' => $userId,
+                'points' => $pointsToRedeem,
+                'amount' => 0, // caller can update after
+                'reason' => $reason ?? 'Point Redemption',
+                'status' => 'approved',
             ]);
 
             $remainingToRedeem = $pointsToRedeem;
@@ -114,34 +112,34 @@ class PointService
                     break;
                 }
 
-                $available   = $pointRecord->remaining_points;
+                $available = $pointRecord->remaining_points;
                 $deductAmount = min($available, $remainingToRedeem);
 
                 // Append to the segment's redemption history JSON
-                $history   = is_array($pointRecord->redemption_history) ? $pointRecord->redemption_history : [];
+                $history = is_array($pointRecord->redemption_history) ? $pointRecord->redemption_history : [];
                 $history[] = [
                     'redemption_id' => $redemption->id,
-                    'date'          => Carbon::now()->toDateString(),
-                    'points'        => $deductAmount,
-                    'reason'        => $reason ?? 'Point Redemption',
+                    'date' => Carbon::now()->toDateString(),
+                    'points' => $deductAmount,
+                    'reason' => $reason ?? 'Point Redemption',
                 ];
 
                 $pointRecord->getConnection()
                     ->table($pointRecord->getTable())
                     ->where('id', $pointRecord->id)
                     ->update([
-                        'redeemed_points'    => $pointRecord->redeemed_points + $deductAmount,
+                        'redeemed_points' => $pointRecord->redeemed_points + $deductAmount,
                         'redemption_history' => json_encode($history),
-                        'updated_at'         => Carbon::now(),
+                        'updated_at' => Carbon::now(),
                     ]);
 
                 // Polymorphic detail record for full audit trail
                 RedeemPointsDetails::create([
-                    'redeem_id'   => $redemption->id,
-                    'source_id'   => $pointRecord->id,
+                    'redeem_id' => $redemption->id,
+                    'source_id' => $pointRecord->id,
                     'source_type' => get_class($pointRecord),
-                    'user_id'     => $userId,
-                    'points'      => $deductAmount,
+                    'user_id' => $userId,
+                    'points' => $deductAmount,
                 ]);
 
                 $remainingToRedeem -= $deductAmount;
@@ -163,7 +161,7 @@ class PointService
         $earnedToExpire = EarnedPoint::activeStatus()
             ->whereNotNull('expires_at')
             ->where('expires_at', '<', $now)
-            ->whereRaw('COALESCE(points, 0) > COALESCE(redeemed_points, 0)')
+            ->whereRaw('COALESCE(points, 0) > COALESCE(redeemed_points, 0) + COALESCE(cancelled_points, 0)')
             ->get(['id', 'gratitudeNumber']);
 
         $earnedExpired = 0;
@@ -175,7 +173,7 @@ class PointService
         $bonusToExpire = BonusPoint::activeStatus()
             ->whereNotNull('expires_at')
             ->where('expires_at', '<', $now)
-            ->whereRaw('COALESCE(points, 0) > COALESCE(redeemed_points, 0)')
+            ->whereRaw('COALESCE(points, 0) > COALESCE(redeemed_points, 0) + COALESCE(cancelled_points, 0)')
             ->get(['id', 'gratitudeNumber']);
 
         $bonusExpired = 0;
@@ -212,37 +210,41 @@ class PointService
                 ->where(function ($q) use ($now) {
                     $q->whereNull('usable_date')->orWhere('usable_date', '<=', $now);
                 })
-                ->whereRaw('COALESCE(points, 0) > COALESCE(redeemed_points, 0)')
+                ->whereRaw('COALESCE(points, 0) > COALESCE(redeemed_points, 0) + COALESCE(cancelled_points, 0)')
                 ->lockForUpdate();
         };
 
         $earnedPoints = $applyFilters(EarnedPoint::query())->get();
-        $bonusPoints  = $applyFilters(BonusPoint::query())->get();
+        $bonusPoints = $applyFilters(BonusPoint::query())->get();
 
         return $earnedPoints
             ->concat($bonusPoints)
             ->map(function ($point) {
-                $point->remaining_points = max(0, (int) $point->points - (int) $point->redeemed_points);
+                $point->remaining_points = max(
+                    0,
+                    (int) $point->points - (int) $point->redeemed_points - (int) $point->cancelled_points
+                );
+
                 return $point;
             })
-            ->filter(fn($p) => $p->remaining_points > 0)
+            ->filter(fn ($p) => $p->remaining_points > 0)
             ->sort(function ($left, $right) {
                 // 1. Soonest-expiring first (nulls last — no expiry = expire last)
-                $leftExpiry  = $left->expires_at  ? Carbon::parse($left->expires_at)->timestamp  : PHP_INT_MAX;
+                $leftExpiry = $left->expires_at ? Carbon::parse($left->expires_at)->timestamp : PHP_INT_MAX;
                 $rightExpiry = $right->expires_at ? Carbon::parse($right->expires_at)->timestamp : PHP_INT_MAX;
                 if ($leftExpiry !== $rightExpiry) {
                     return $leftExpiry <=> $rightExpiry;
                 }
 
                 // 2. Earliest effective date (usable_date > date > created_at)
-                $leftDate  = Carbon::parse($left->usable_date  ?? $left->date  ?? $left->created_at)->timestamp;
+                $leftDate = Carbon::parse($left->usable_date ?? $left->date ?? $left->created_at)->timestamp;
                 $rightDate = Carbon::parse($right->usable_date ?? $right->date ?? $right->created_at)->timestamp;
                 if ($leftDate !== $rightDate) {
                     return $leftDate <=> $rightDate;
                 }
 
                 // 3. Earned before bonus (earned = 1, bonus = 2)
-                $leftType  = $left  instanceof BonusPoint ? 2 : 1;
+                $leftType = $left  instanceof BonusPoint ? 2 : 1;
                 $rightType = $right instanceof BonusPoint ? 2 : 1;
                 if ($leftType !== $rightType) {
                     return $leftType <=> $rightType;
@@ -259,7 +261,7 @@ class PointService
      */
     protected function resolveLevelForPoint(?string $gratitudeNumber)
     {
-        if (!$gratitudeNumber) {
+        if (! $gratitudeNumber) {
             return null;
         }
 
