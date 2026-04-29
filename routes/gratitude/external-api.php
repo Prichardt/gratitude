@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Gratitude\GratitudeController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('gratitude')->name('gratitude.')->group(function () {
+    Route::get('/all', [GratitudeController::class, 'index'])->name('index');  
     Route::get('{gratitudeNumber}', [GratitudeController::class, 'show'])->name('show');
 
     // Earned Points

@@ -28,6 +28,12 @@ class GratitudeController extends Controller
         protected GratitudeService $gratitudeService,
     ) {}
 
+    public function index()
+    {
+        $gratitudes = $this->gratitudeService->allGratitudes();
+        return response()->json($gratitudes);
+    }
+
     public function show(string $gratitudeNumber)
     {
         $data = $this->gratitudeService->gratitudeDataByNumber($gratitudeNumber);

@@ -43,11 +43,11 @@ class GratitudeController extends Controller
 
     public function import()
     {
-        $getResponse     = $this->aivteamHttp()->get('http://aivteam.local/api/get/gratitude-data-all/open/gratitude');
-        $getJourneysData = $this->aivteamHttp()->get('http://aivteam.local/api/get/all/journeys');
+        $getResponse     = $this->aivteamHttp()->get('https://aivteam.com/api/gratitude/get/gratitude-data-all');
+        $getJourneysData = $this->aivteamHttp()->get('https://aivteam.com/api/get/all/journeys');
 
         if (!$getResponse->successful()) {
-            return response()->json(['message' => 'Failed to fetch data from remote API', 'status' => $getResponse->status()], 500);
+            return response()->json(['message' => 'Failed to fetch data from remote API Testing', 'status' => $getResponse->status()], 500);
         }
 
         $data = $getResponse->json();

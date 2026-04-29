@@ -177,6 +177,11 @@ class GratitudeService
         }
     }
 
+    public function allGratitudes(): Collection
+    {
+        return Gratitude::all();
+    }
+
     private function parseFallbackDate(array $row): ?Carbon
     {
         foreach (['date', 'created_at'] as $field) {
