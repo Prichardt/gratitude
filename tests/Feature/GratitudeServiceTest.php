@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\ValidateBearerToken;
 use App\Models\Gratitude\BonusPoint;
 use App\Models\Gratitude\EarnedPoint;
 use App\Models\Gratitude\Gratitude;
@@ -46,6 +47,41 @@ class GratitudeServiceTest extends TestCase
             'level' => 'Explorer',
             'level_obtained_at' => Carbon::today(),
             'systemLevelUpdate' => true,
+        ]);
+    }
+
+    public function test_create_account_generates_the_next_gratitude_number()
+    {
+        Gratitude::create([
+            'gratitudeNumber' => 'G0009',
+            'level' => 'Explorer',
+            'level_obtained_at' => Carbon::today(),
+        ]);
+
+        $gratitude = $this->gratitudeService->createAccount();
+
+        $this->assertEquals('G0010', $gratitude->gratitudeNumber);
+        $this->assertEquals('Explorer', $gratitude->level);
+        $this->assertEquals(0, $gratitude->totalPoints);
+        $this->assertTrue($gratitude->is_active);
+    }
+
+    public function test_external_api_can_create_a_gratitude_account()
+    {
+        $this->withoutMiddleware(ValidateBearerToken::class);
+
+        $response = $this->postJson('/api/v1/gratitude', [
+            'gratitude_number' => 'G-EXT-1001',
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('message', 'Gratitude account created')
+            ->assertJsonPath('gratitude.gratitudeNumber', 'G-EXT-1001');
+
+        $this->assertDatabaseHas('gratitudes', [
+            'gratitudeNumber' => 'G-EXT-1001',
+            'level' => 'Explorer',
         ]);
     }
 

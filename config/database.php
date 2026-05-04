@@ -64,6 +64,25 @@ return [
             ]) : [],
         ],
 
+        'auth_db' => [
+            'driver' => 'mysql',
+            'host' => env('GRATITUDE_AUTH_DB_HOST', '127.0.0.1'),
+            'port' => env('GRATITUDE_AUTH_DB_PORT', '3306'),
+            'database' => env('GRATITUDE_AUTH_DB_DATABASE', 'gratitude_main_local'),
+            'username' => env('GRATITUDE_AUTH_DB_USERNAME', 'root'),
+            'password' => env('GRATITUDE_AUTH_DB_PASSWORD', ''),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
         'activity_logs' => [
             'driver' => 'mysql',
             'host' => env('ACTIVITY_LOG_DB_HOST', '127.0.0.1'),

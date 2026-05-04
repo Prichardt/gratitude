@@ -18,6 +18,7 @@ use App\Services\Gratitude\CancellationService;
 use App\Services\Gratitude\EarnedPointService;
 use App\Services\Gratitude\GratitudeService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class GratitudeController extends Controller
 {
@@ -33,6 +34,41 @@ class GratitudeController extends Controller
         $gratitudes = $this->gratitudeService->allGratitudes();
 
         return response()->json($gratitudes);
+    }
+
+    public function store(Request $request)
+    {
+        if (
+            $request->filled('gratitudeNumber')
+            && $request->filled('gratitude_number')
+            && $request->input('gratitudeNumber') !== $request->input('gratitude_number')
+        ) {
+            throw ValidationException::withMessages([
+                'gratitude_number' => 'The gratitude_number and gratitudeNumber fields must match when both are provided.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'old_id' => ['nullable', 'integer', 'unique:gratitudes,old_id'],
+            'gratitudeNumber' => ['nullable', 'string', 'max:255', 'unique:gratitudes,gratitudeNumber'],
+            'gratitude_number' => ['nullable', 'string', 'max:255', 'unique:gratitudes,gratitudeNumber'],
+            'level' => ['nullable', 'string', 'max:255', 'exists:gratitude_levels,name'],
+            'level_obtained_at' => ['nullable', 'date'],
+            'status' => ['nullable', 'string', 'max:255'],
+            'statusChange' => ['nullable', 'string', 'max:255'],
+            'statusChangeReason' => ['nullable', 'string', 'max:255'],
+            'systemLevelUpdate' => ['nullable', 'boolean'],
+            'is_active' => ['nullable', 'boolean'],
+            'importStatus' => ['nullable', 'boolean'],
+            'expires_at' => ['nullable', 'date'],
+        ]);
+
+        $gratitude = $this->gratitudeService->createAccount($validated);
+
+        return response()->json([
+            'message' => 'Gratitude account created',
+            'gratitude' => $gratitude,
+        ], 201);
     }
 
     public function show(string $gratitudeNumber)

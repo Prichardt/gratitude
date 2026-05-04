@@ -18,6 +18,74 @@ class GratitudeService
 {
     public function __construct(protected PointExpiryService $pointExpiryService) {}
 
+    public function createAccount(array $data = []): Gratitude
+    {
+        return DB::transaction(function () use ($data) {
+            $levelObtainedAt = ! empty($data['level_obtained_at'])
+                ? Carbon::parse($data['level_obtained_at'])
+                : Carbon::now();
+
+            $level = $data['level'] ?? $this->defaultLevelName();
+            $gratitudeNumber = $data['gratitudeNumber']
+                ?? $data['gratitude_number']
+                ?? $this->generateGratitudeNumber();
+
+            return Gratitude::create([
+                'old_id' => $data['old_id'] ?? null,
+                'gratitudeNumber' => $gratitudeNumber,
+                'totalPoints' => 0,
+                'totalEarnedPoints' => 0,
+                'totalBonusPoints' => 0,
+                'totalExpiredPoints' => 0,
+                'totalCancelledPoints' => 0,
+                'totalRedeemedPoints' => 0,
+                'totalRemainingPoints' => 0,
+                'useablePoints' => 0,
+                'nonUseablePoints' => 0,
+                'level' => $level,
+                'levelHistory' => [
+                    [
+                        'level' => $level,
+                        'startDate' => $levelObtainedAt->toDateString(),
+                        'endDate' => null,
+                        'changedBy' => 'external_api',
+                    ],
+                ],
+                'level_obtained_at' => $levelObtainedAt,
+                'status' => $data['status'] ?? 'active',
+                'statusChange' => $data['statusChange'] ?? null,
+                'statusChangeReason' => $data['statusChangeReason'] ?? null,
+                'systemLevelUpdate' => $data['systemLevelUpdate'] ?? true,
+                'is_active' => $data['is_active'] ?? true,
+                'importStatus' => $data['importStatus'] ?? false,
+                'expires_at' => ! empty($data['expires_at']) ? Carbon::parse($data['expires_at']) : null,
+                'last_activity_at' => Carbon::now(),
+            ]);
+        });
+    }
+
+    public function generateGratitudeNumber(string $prefix = 'G'): string
+    {
+        $prefix = strtoupper($prefix);
+
+        $numbers = Gratitude::whereNotNull('gratitudeNumber')
+            ->lockForUpdate()
+            ->pluck('gratitudeNumber');
+
+        $highestNumber = $numbers->reduce(function (int $highest, ?string $gratitudeNumber) use ($prefix) {
+            if (! $gratitudeNumber || ! preg_match('/^'.preg_quote($prefix, '/').'(\d+)$/', $gratitudeNumber, $matches)) {
+                return $highest;
+            }
+
+            return max($highest, (int) $matches[1]);
+        }, 0);
+
+        $nextNumber = $highestNumber + 1;
+        $padding = max(4, strlen((string) $nextNumber));
+
+        return $prefix.str_pad((string) $nextNumber, $padding, '0', STR_PAD_LEFT);
+    }
+
     public function import(array $data, array $journeysMap = []): void
     {
         foreach ($data as $record) {
@@ -191,6 +259,13 @@ class GratitudeService
     public function allGratitudes(): Collection
     {
         return Gratitude::all();
+    }
+
+    private function defaultLevelName(): string
+    {
+        return GratitudeLevel::where('status', true)
+            ->orderBy('min_points')
+            ->value('name') ?? 'Explorer';
     }
 
     private function parseFallbackDate(array $row): ?Carbon
