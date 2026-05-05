@@ -6,24 +6,19 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('gratitude_benefits', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->string('benefit_key')->nullable()->unique();
             $table->text('description')->nullable();
-            $table->string('type')->nullable(); // percentage or fixed amount
+            $table->string('type')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('gratitude_benefits');

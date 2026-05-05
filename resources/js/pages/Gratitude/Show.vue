@@ -30,6 +30,7 @@ const props = defineProps({
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Home', href: '/dashboard' },
     { title: 'Gratitude Program', href: '/gratitude' },
+    { title: 'Accounts', href: '/gratitude/accounts' },
     { title: `Gratitude #${props.gratitudeNumber}`, href: `/gratitude/${props.gratitudeNumber}` },
 ];
 
@@ -138,10 +139,10 @@ const combinedTierPoints = computed(() => {
         .map((c: any) => ({
             ...c,
             rowType: 'cancel',
-            displayDate: c.date, 
-            displayProject: 'System / Generic', 
+            displayDate: c.date,
+            displayProject: c.category || 'Point Cancellation',
             displaySubtitle: '',
-            displayPoints: -c.points,
+            displayPoints: c.points,
             displayExpiresOn: '',
             displayDescription: c.description || 'Cancellation',
             sortDate: c.date,
@@ -585,6 +586,7 @@ const formatNumber = (num: number) => {
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Redeemed</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cancelled</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Remaining</th>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-orange-600/80 dark:text-orange-400/80 uppercase tracking-wider">Expired</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expires On</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-1/3">Description</th>
                                         <th class="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
@@ -603,11 +605,15 @@ const formatNumber = (num: number) => {
                                                 </span>
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4">
-                                                <div class="text-sm text-foreground/90 font-bold" :class="{'line-through': item.isFullyCancelled}">{{ item.displayProject }}</div>
+                                                <div class="text-sm font-bold" :class="{'line-through text-muted-foreground': item.isFullyCancelled, 'text-foreground/90': !item.isFullyCancelled}">
+                                                    <span v-if="item.rowType === 'cancel'" class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-destructive/10 text-destructive border border-destructive/30 mr-1.5">Cancellation</span>
+                                                    {{ item.displayProject }}
+                                                </div>
                                                 <div v-if="item.displaySubtitle" class="text-xs text-muted-foreground mt-0.5">{{ item.displaySubtitle }}</div>
                                             </td>
-                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="item.rowType === 'cancel' || item.isFullyCancelled ? 'text-destructive line-through' : 'text-foreground'">
-                                                {{ formatNumber(item.displayPoints) }}
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="item.isFullyCancelled ? 'text-destructive line-through' : item.rowType === 'cancel' ? 'text-destructive' : 'text-foreground'">
+                                                <template v-if="item.rowType === 'cancel'">-{{ formatNumber(item.displayPoints) }}</template>
+                                                <template v-else>{{ formatNumber(item.displayPoints) }}</template>
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-600 dark:text-amber-400">
                                                 <template v-if="item.rowType !== 'cancel'">{{ formatNumber(item.redeemed_points || 0) }}</template>
@@ -620,6 +626,14 @@ const formatNumber = (num: number) => {
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="item.isFullyCancelled ? 'text-muted-foreground' : 'text-green-600 dark:text-green-400'">
                                                 <template v-if="item.rowType !== 'cancel'">{{ formatNumber(pointRemaining(item)) }}</template>
                                                 <span v-else class="text-muted-foreground">—</span>
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold">
+                                                <template v-if="item.rowType === 'earned' && item.isExpired">
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400">
+                                                        <Clock class="w-3 h-3" />{{ formatNumber(pointRemaining(item)) }}
+                                                    </span>
+                                                </template>
+                                                <span v-else class="text-muted-foreground text-xs">—</span>
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-foreground/80">
                                                 <span v-if="item.displayExpiresOn || item.expires_at" :class="{'line-through text-muted-foreground': item.isFullyCancelled}">
@@ -651,6 +665,7 @@ const formatNumber = (num: number) => {
                                                     </div>
                                                 </div>
                                             </td>
+
                                             
                                             <td class="px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
                                                 <ViewEntryDetails :item="item" />
@@ -692,7 +707,7 @@ const formatNumber = (num: number) => {
                                         </tr>
                                         <!-- Nested Redemption History Row -->
                                         <tr v-if="item.redemptionsList && item.redemptionsList.length > 0" class="bg-muted/10 border-t-0 border-b border-border shadow-inner">
-                                            <td colspan="9" class="px-8 py-3">
+                                            <td colspan="10" class="px-8 py-3">
                                                 <div class="flex flex-col gap-1.5 pl-4 border-l-2 border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-2 rounded-r-md">
                                                     <div v-for="red in item.redemptionsList" :key="red._key" class="text-xs text-muted-foreground flex items-center gap-3">
                                                         <History class="w-3.5 h-3.5" />
@@ -705,7 +720,7 @@ const formatNumber = (num: number) => {
                                         </tr>
                                     </template>
                                     <tr v-if="combinedTierPoints.length === 0">
-                                        <td colspan="9" class="px-6 py-8 text-center text-sm text-muted-foreground">No tier points recorded.</td>
+                                        <td colspan="10" class="px-6 py-8 text-center text-sm text-muted-foreground">No tier points recorded.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -748,6 +763,7 @@ const formatNumber = (num: number) => {
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Redeemed</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cancelled</th>
                                         <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Remaining</th>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-orange-600/80 dark:text-orange-400/80 uppercase tracking-wider">Expired</th>
                                         <th class="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
                                     </tr>
                                 </thead>
@@ -806,6 +822,14 @@ const formatNumber = (num: number) => {
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-600 dark:text-amber-400">{{ formatNumber(point.redeemed_points || 0) }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-destructive">{{ formatNumber(pointCancelled(point)) }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-bold" :class="point.isFullyCancelled ? 'text-muted-foreground' : 'text-green-600 dark:text-green-400'">{{ formatNumber(pointRemaining(point)) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold">
+                                                <template v-if="point.isExpired">
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400">
+                                                        <Clock class="w-3 h-3" />{{ formatNumber(pointRemaining(point)) }}
+                                                    </span>
+                                                </template>
+                                                <span v-else class="text-muted-foreground text-xs">—</span>
+                                            </td>
                                             <td class=" px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
                                                 <ViewEntryDetails :item="point" />
                                                 <template v-if="point.rowType === 'bonus'">
@@ -837,7 +861,7 @@ const formatNumber = (num: number) => {
                                         </tr>
                                         <!-- Nested Redemption History Row -->
                                         <tr v-if="point.redemptionsList && point.redemptionsList.length > 0" class="bg-muted/10 border-t-0 border-b border-border shadow-inner">
-                                            <td colspan="8" class="px-8 py-3">
+                                            <td colspan="9" class="px-8 py-3">
                                                 <div class="flex flex-col gap-1.5 pl-4 border-l-2 border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-2 rounded-r-md">
                                                     <div v-for="red in point.redemptionsList" :key="red._key" class="text-xs text-muted-foreground flex items-center gap-3">
                                                         <History class="w-3.5 h-3.5" />
@@ -850,7 +874,7 @@ const formatNumber = (num: number) => {
                                         </tr>
                                     </template>
                                     <tr v-if="combinedBonusPoints.length === 0">
-                                        <td colspan="8" class="px-6 py-8 text-center text-sm text-muted-foreground">No bonus points recorded.</td>
+                                        <td colspan="9" class="px-6 py-8 text-center text-sm text-muted-foreground">No bonus points recorded.</td>
                                     </tr>
                                 </tbody>
                             </table>

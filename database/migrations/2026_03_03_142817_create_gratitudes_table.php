@@ -6,13 +6,10 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('gratitudes', function (Blueprint $table) {
-            $table->id();            
+            $table->id();
             $table->bigInteger('old_id')->nullable();
             $table->string('gratitudeNumber')->nullable()->unique();
             $table->integer('totalPoints')->nullable();
@@ -24,10 +21,11 @@ return new class extends Migration
             $table->integer('totalRemainingPoints')->nullable();
             $table->integer('useablePoints')->nullable();
             $table->integer('nonUseablePoints')->nullable();
-            $table->string('level')->nullable(); // Explorer, Globetrotter, Jetsetter
-            $table->json('levelHistory')->nullable(); // [{"level":"Explorer","startDate":"2024-01-01","endDate":"2024-02-01"},{"level":"Globetrotter","startDate":"2024-02-02","endDate":null}]
+            $table->string('level')->nullable();
+            $table->json('levelHistory')->nullable();
+            $table->timestamp('level_obtained_at')->nullable();
             $table->string('status')->nullable();
-            $table->string('statusChange')->nullable(); // upgrade, downgrade
+            $table->string('statusChange')->nullable();
             $table->string('statusChangeReason')->nullable();
             $table->boolean('systemLevelUpdate')->default(true);
             $table->boolean('is_active')->default(true);
@@ -39,9 +37,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('gratitudes');

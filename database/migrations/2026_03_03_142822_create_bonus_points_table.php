@@ -6,9 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         $remainingPointsExpression = 'CASE WHEN COALESCE(points, 0) - COALESCE(redeemed_points, 0) - COALESCE(cancelled_points, 0) > 0 THEN COALESCE(points, 0) - COALESCE(redeemed_points, 0) - COALESCE(cancelled_points, 0) ELSE 0 END';
@@ -23,7 +20,7 @@ return new class extends Migration
             $table->string('type')->nullable();
             $table->string('gratitudeNumber');
             $table->integer('points')->default(0);
-            $table->json('points_breakdown')->nullable(); //
+            $table->json('points_breakdown')->nullable();
             $table->integer('redeemed_points')->default(0);
             $table->integer('cancelled_points')->default(0);
             $table->integer('remaining_points')->virtualAs($remainingPointsExpression);
@@ -31,19 +28,15 @@ return new class extends Migration
             $table->string('amount')->nullable();
             $table->string('description')->nullable();
             $table->bigInteger('cancel_id')->nullable();
-            $table->boolean('status')->nullable()->default(true); // active, expired
+            $table->boolean('status')->nullable()->default(true);
             $table->softDeletes();
             $table->timestamps();
-
             $table->timestamp('usable_date')->nullable();
-
             $table->timestamp('expires_at')->nullable();
+            $table->boolean('expires_at_manual')->default(false);
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('bonus_points');
