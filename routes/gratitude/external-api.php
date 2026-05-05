@@ -30,4 +30,7 @@ Route::prefix('gratitude')->name('gratitude.')->group(function () {
     Route::post('{gratitudeNumber}/redeem', [GratitudeController::class, 'storeRedemption'])->name('redeem.store');
     Route::put('{gratitudeNumber}/redeem/{id}', [GratitudeController::class, 'updateRedemption'])->name('redeem.update');
     Route::delete('{gratitudeNumber}/redeem/{id}', [GratitudeController::class, 'destroyRedemption'])->name('redeem.destroy');
+
+    // Earned Benefits
+    Route::post('{gratitudeNumber}/earned-benefits', [GratitudeController::class, 'storeEarnedBenefit'])->name('earned-benefits.store');
 });

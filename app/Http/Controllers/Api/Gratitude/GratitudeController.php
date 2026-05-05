@@ -13,6 +13,8 @@ use App\Models\Gratitude\BonusPoint;
 use App\Models\Gratitude\Cancellation;
 use App\Models\Gratitude\EarnedPoint;
 use App\Models\Gratitude\Gratitude;
+use App\Models\Gratitude\GratitudeBenefit;
+use App\Models\Gratitude\GratitudeEarnedBenefit;
 use App\Models\Gratitude\GratitudeLevel;
 use App\Models\Gratitude\RedeemPoints;
 use App\Services\Gratitude\BonusPointService;
@@ -52,25 +54,73 @@ class GratitudeController extends Controller
         }
 
         $validated = $request->validate([
-            'old_id' => ['nullable', 'integer', 'unique:gratitudes,old_id'],
-            'gratitudeNumber' => ['nullable', 'string', 'max:255', 'unique:gratitudes,gratitudeNumber'],
-            'gratitude_number' => ['nullable', 'string', 'max:255', 'unique:gratitudes,gratitudeNumber'],
-            'level' => ['nullable', 'string', 'max:255', 'exists:gratitude_levels,name'],
-            'level_obtained_at' => ['nullable', 'date'],
-            'status' => ['nullable', 'string', 'max:255'],
-            'statusChange' => ['nullable', 'string', 'max:255'],
-            'statusChangeReason' => ['nullable', 'string', 'max:255'],
-            'systemLevelUpdate' => ['nullable', 'boolean'],
-            'is_active' => ['nullable', 'boolean'],
-            'importStatus' => ['nullable', 'boolean'],
-            'expires_at' => ['nullable', 'date'],
+            'old_id'              => ['nullable', 'integer'],
+            'category'            => ['nullable'],          // int, string, or single-element array
+            'gratitudeNumber'     => ['nullable', 'string', 'max:255'],
+            'gratitude_number'    => ['nullable', 'string', 'max:255'],
+            'level'               => ['nullable', 'string', 'max:255', 'exists:gratitude_levels,name'],
+            'level_obtained_at'   => ['nullable', 'date'],
+            'status'              => ['nullable', 'string', 'max:255'],
+            'statusChange'        => ['nullable', 'string', 'max:255'],
+            'statusChangeReason'  => ['nullable', 'string', 'max:255'],
+            'systemLevelUpdate'   => ['nullable', 'boolean'],
+            'is_active'           => ['nullable', 'boolean'],
+            'importStatus'        => ['nullable', 'boolean'],
+            'expires_at'          => ['nullable', 'date'],
         ]);
 
-        $gratitude = $this->gratitudeService->createAccount($validated);
+        // ── 1. Check for an existing account ─────────────────────────────────
+
+        // By old_id (most reliable cross-system identifier)
+        if (! empty($validated['old_id'])) {
+            $existing = Gratitude::where('old_id', $validated['old_id'])->first();
+            if ($existing) {
+                return response()->json([
+                    'message'        => 'Gratitude account already exists',
+                    'gratitude'      => $existing,
+                    'already_exists' => true,
+                ], 200);
+            }
+        }
+
+        // By explicit gratitude number if the caller supplied one
+        $requestedNumber = $validated['gratitudeNumber'] ?? $validated['gratitude_number'] ?? null;
+        if ($requestedNumber) {
+            $existing = Gratitude::where('gratitudeNumber', $requestedNumber)->first();
+            if ($existing) {
+                return response()->json([
+                    'message'        => 'Gratitude account already exists',
+                    'gratitude'      => $existing,
+                    'already_exists' => true,
+                ], 200);
+            }
+        }
+
+        // ── 2. Resolve prefix from category ──────────────────────────────────
+        //
+        // Category can arrive as an int, a numeric string, or a single-element
+        // array (e.g. [1]).  $category[0] mirrors the caller's own convention.
+        //
+        //   1 → Guest                 → G
+        //   2 → Guest Of Travel Agency → T
+        //   3 → Travel Agency Partner  → P
+        //   anything else              → G (default)
+
+        $prefixes   = ['1' => 'G', '2' => 'T', '3' => 'P'];
+        $category   = $validated['category'] ?? null;
+        $categoryId = is_array($category) ? ($category[0] ?? null) : $category;
+        $prefix     = $prefixes[(string) $categoryId] ?? 'G';
+
+        // ── 3. Create the account ─────────────────────────────────────────────
+
+        $gratitude = $this->gratitudeService->createAccount(
+            array_merge($validated, ['_prefix' => $prefix])
+        );
 
         return response()->json([
-            'message' => 'Gratitude account created',
+            'message'  => 'Gratitude account created',
             'gratitude' => $gratitude,
+            'prefix_used' => $prefix,
         ], 201);
     }
 
@@ -278,6 +328,59 @@ class GratitudeController extends Controller
         GratitudeService::syncAccountBalance($gratitudeNumber);
 
         return response()->json(['message' => 'Redemption updated', 'redemption' => $redemption]);
+    }
+
+    // Earned Benefits
+    public function storeEarnedBenefit(Request $request, string $gratitudeNumber)
+    {
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
+
+        $validated = $request->validate([
+            'benefit_id'    => 'nullable|exists:gratitude_benefits,id',
+            'journey_id'    => 'nullable|integer',
+            'benefit_name'  => 'required_without:benefit_id|string|max:255|nullable',
+            'benefit_key'   => 'nullable|string|max:255',
+            'description'   => 'required|string',
+            'benefit_value' => 'nullable|string|max:255',
+            'value_type'    => 'nullable|string|max:255',
+            'project_data'  => 'nullable|array',
+            'date'          => 'required|date',
+            'status'        => 'nullable|string|max:50',
+            'notes'         => 'nullable|string',
+        ]);
+
+        // Auto-resolve benefit_name / benefit_key from the linked benefit when omitted
+        if (! empty($validated['benefit_id'])) {
+            $benefit = GratitudeBenefit::find($validated['benefit_id']);
+            if ($benefit) {
+                $validated['benefit_name'] = $validated['benefit_name'] ?? $benefit->name;
+                $validated['benefit_key']  = $validated['benefit_key']  ?? $benefit->benefit_key;
+            }
+        }
+
+        $entry = GratitudeEarnedBenefit::create(array_merge($validated, [
+            'gratitudeNumber' => $gratitude->gratitudeNumber,
+            'status'          => $validated['status'] ?? 'active',
+        ]));
+
+        return response()->json([
+            'message'        => 'Earned benefit recorded',
+            'earned_benefit' => [
+                'id'            => $entry->id,
+                'gratitudeNumber' => $entry->gratitudeNumber,
+                'benefit_name'  => $entry->benefit_name,
+                'benefit_key'   => $entry->benefit_key,
+                'benefit_value' => $entry->benefit_value,
+                'value_type'    => $entry->value_type,
+                'description'   => $entry->description,
+                'journey_id'    => $entry->journey_id,
+                'project_data'  => $entry->project_data,
+                'date'          => $entry->date?->toDateString(),
+                'status'        => $entry->status,
+                'notes'         => $entry->notes,
+                'created_at'    => $entry->created_at?->toISOString(),
+            ],
+        ], 201);
     }
 
     public function destroyRedemption(string $gratitudeNumber, int $id)

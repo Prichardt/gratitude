@@ -8,6 +8,7 @@ import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import {
     Activity,
+    Award,
     BadgeCheck,
     CircleDollarSign,
     Gift,
@@ -116,17 +117,20 @@ const operations: Operation[] = [
         path: '/api/v1/gratitude',
         icon: UserPlus,
         payload: json({
-            gratitude_number: 'G0880',
+            old_id: 4821,
+            category: [1],
             level: 'Explorer',
             status: 'active',
         }),
         returns: json({
             message: 'Gratitude account created',
             gratitude: {
-                gratitudeNumber: 'G0880',
+                gratitudeNumber: 'G0042',
                 level: 'Explorer',
                 useablePoints: 0,
             },
+            prefix_used: 'G',
+            already_exists: false,
         }),
     },
     {
@@ -292,6 +296,42 @@ const operations: Operation[] = [
                     description: 'Journey completed',
                 },
             ],
+        }),
+    },
+    {
+        name: 'Record earned benefit',
+        method: 'POST',
+        path: '/api/v1/gratitude/{number}/earned-benefits',
+        icon: Award,
+        payload: json({
+            date: '2026-05-05',
+            description: 'Late checkout granted on departure',
+            benefit_name: 'Late Checkout',
+            benefit_key: 'late_checkout',
+            benefit_value: '2 Hours',
+            value_type: 'item',
+            journey_id: 12345,
+            project_data: {
+                projectNumber: 'P-001',
+                name: 'The Lodge',
+            },
+            status: 'used',
+            notes: 'Guest requested at front desk',
+        }),
+        returns: json({
+            message: 'Earned benefit recorded',
+            earned_benefit: {
+                id: 7,
+                gratitudeNumber: 'G0880',
+                benefit_name: 'Late Checkout',
+                benefit_key: 'late_checkout',
+                benefit_value: '2 Hours',
+                value_type: 'item',
+                description: 'Late checkout granted on departure',
+                journey_id: 12345,
+                date: '2026-05-05',
+                status: 'used',
+            },
         }),
     },
 ];
