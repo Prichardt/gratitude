@@ -352,7 +352,11 @@ class GratitudeService
         return in_array($this->normalizeImportDescription($row['description'] ?? null), [
             'points expired (+2 years)',
             'points expired (2+ years)',
+            'Points Expired (3+ years)',
+            '2 year expiration',
             'program retired',
+            'Program terminated',
+            'bonus points expired',
             'expired points',
         ], true);
     }
