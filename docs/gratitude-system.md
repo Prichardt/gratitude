@@ -463,7 +463,11 @@ All external routes require bearer-token auth.
 | --- | --- | --- |
 | `GET` | `/all` | List all gratitude accounts. |
 | `POST` | `/` | Create a gratitude account. |
+| `GET` | `/levels/{level}/benefits` | List active benefits configured for a level. |
 | `GET` | `/{gratitudeNumber}` | Show account data. |
+| `GET` | `/{gratitudeNumber}/balance` | Check account balances and pending points. |
+| `GET` | `/{gratitudeNumber}/level` | Check current level and level rules. |
+| `GET` | `/{gratitudeNumber}/points-history` | Get earned, bonus, redemption, cancellation, and expiration history. |
 | `POST` | `/{gratitudeNumber}/earned` | Add earned points. |
 | `PUT` | `/{gratitudeNumber}/earned/{id}` | Update earned points. |
 | `DELETE` | `/{gratitudeNumber}/earned/{id}` | Delete earned points. |

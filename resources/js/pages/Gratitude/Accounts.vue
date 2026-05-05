@@ -28,7 +28,7 @@ const columns = [
     { key: 'totalExpiredPoints', label: 'Expired Points', sortable: true, align: 'right' as const },
     { key: 'last_activity_at', label: 'Last Activity', sortable: true },
     { key: 'status', label: 'Status', sortable: true, align: 'center' as const },
-    { key: 'actions', label: 'Actions', align: 'center' as const },
+    { key: 'actions', label: 'Actions', align: 'center' as const, exportable: false },
 ];
 
 

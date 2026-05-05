@@ -6,20 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Models\ApplicationKey;
 use App\Services\AuthSecurity\ApplicationKeyService;
 use Illuminate\Http\Request;
-use Spatie\Permission\Models\Role;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Spatie\Permission\Models\Role;
 
 class ApplicationKeyController extends Controller
 {
-    public function __construct(protected ApplicationKeyService $appKeyService)
-    {
-    }
+    public function __construct(protected ApplicationKeyService $appKeyService) {}
 
     public function index()
     {
         return Inertia::render('AuthSecurity/ApplicationKeys/Index', [
             'application_keys' => $this->appKeyService->getAllKeys(),
-            'roles' => Role::all()
+            'roles' => Role::all(),
         ]);
     }
 
@@ -29,7 +28,8 @@ class ApplicationKeyController extends Controller
             'name' => 'required|string|unique:application_keys,name',
             'url' => 'nullable|url',
             'status' => 'required|string|in:active,inactive',
-            'roles' => 'array'
+            'roles' => 'array',
+            'roles.*' => ['string', Rule::exists('roles', 'name')->where('guard_name', 'web')],
         ]);
 
         $result = $this->appKeyService->createKey($validated);
@@ -42,10 +42,11 @@ class ApplicationKeyController extends Controller
     public function update(Request $request, ApplicationKey $application_key)
     {
         $validated = $request->validate([
-            'name' => 'required|string|unique:application_keys,name,' . $application_key->id,
+            'name' => 'required|string|unique:application_keys,name,'.$application_key->id,
             'url' => 'nullable|url',
             'status' => 'required|string|in:active,inactive',
-            'roles' => 'array'
+            'roles' => 'array',
+            'roles.*' => ['string', Rule::exists('roles', 'name')->where('guard_name', 'web')],
         ]);
 
         $this->appKeyService->updateKey($application_key, $validated);
@@ -56,6 +57,7 @@ class ApplicationKeyController extends Controller
     public function destroy(ApplicationKey $application_key)
     {
         $this->appKeyService->deleteKey($application_key);
+
         return redirect()->route('application-keys.index')->with('success', 'Application Key deleted successfully.');
     }
 
@@ -77,7 +79,8 @@ class ApplicationKeyController extends Controller
             'name' => 'required|string|unique:application_keys,name',
             'url' => 'nullable|url',
             'status' => 'required|string|in:active,inactive',
-            'roles' => 'array'
+            'roles' => 'array',
+            'roles.*' => ['string', Rule::exists('roles', 'name')->where('guard_name', 'web')],
         ]);
 
         $result = $this->appKeyService->createKey($validated);
@@ -85,24 +88,25 @@ class ApplicationKeyController extends Controller
         return response()->json([
             'message' => 'Application Key created successfully.',
             'data' => $result['application_key'],
-            'plainTextToken' => $result['plainTextToken']
+            'plainTextToken' => $result['plainTextToken'],
         ], 201);
     }
 
     public function apiUpdate(Request $request, ApplicationKey $application_key)
     {
         $validated = $request->validate([
-            'name' => 'required|string|unique:application_keys,name,' . $application_key->id,
+            'name' => 'required|string|unique:application_keys,name,'.$application_key->id,
             'url' => 'nullable|url',
             'status' => 'required|string|in:active,inactive',
-            'roles' => 'array'
+            'roles' => 'array',
+            'roles.*' => ['string', Rule::exists('roles', 'name')->where('guard_name', 'web')],
         ]);
 
         $updated = $this->appKeyService->updateKey($application_key, $validated);
 
         return response()->json([
             'message' => 'Application Key updated successfully.',
-            'data' => $updated
+            'data' => $updated,
         ]);
     }
 
@@ -111,8 +115,8 @@ class ApplicationKeyController extends Controller
         $updated = $this->appKeyService->toggleStatus($application_key);
 
         return response()->json([
-            'message' => 'Application Key status updated to ' . $updated->status . '.',
-            'data' => $updated
+            'message' => 'Application Key status updated to '.$updated->status.'.',
+            'data' => $updated,
         ]);
     }
 
@@ -123,13 +127,14 @@ class ApplicationKeyController extends Controller
         return response()->json([
             'message' => 'Token regenerated successfully.',
             'data' => $result['application_key'],
-            'plainTextToken' => $result['plainTextToken']
+            'plainTextToken' => $result['plainTextToken'],
         ]);
     }
 
     public function apiDestroy(ApplicationKey $application_key)
     {
         $this->appKeyService->deleteKey($application_key);
+
         return response()->json(['message' => 'Application Key deleted successfully.']);
     }
 }

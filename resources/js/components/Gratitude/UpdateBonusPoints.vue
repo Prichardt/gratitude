@@ -16,7 +16,7 @@ const isOpen = ref(false);
 const toDateInput = (val: string | null | undefined) => val ? val.split('T')[0] : '';
 
 const form = ref({
-    date: toDateInput(props.point.date),
+    date: toDateInput(props.point.usable_date || props.point.useable_date || props.point.date),
     description: props.point.description,
     points: props.point.points,
     expires_at: toDateInput(props.point.expires_at),
@@ -28,7 +28,7 @@ watch(isOpen, (open) => {
     }
 
     form.value = {
-        date: toDateInput(props.point.date),
+        date: toDateInput(props.point.usable_date || props.point.useable_date || props.point.date),
         description: props.point.description,
         points: props.point.points,
         expires_at: toDateInput(props.point.expires_at),
@@ -55,7 +55,7 @@ const submit = async () => {
                 <h2 class="text-xl font-bold mb-4">Update Bonus Points</h2>
                 <form @submit.prevent="submit" class="space-y-4">
                     <div>
-                        <Label>Date</Label>
+                        <Label>Effective Date</Label>
                         <Input type="date" v-model="form.date" required />
                     </div>
                     <div>

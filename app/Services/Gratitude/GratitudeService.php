@@ -110,6 +110,12 @@ class GratitudeService
             // Cancellation Points (processed before earned/bonus so cancel_id can be resolved)
             if (isset($record['cancellationPoints']) && is_array($record['cancellationPoints'])) {
                 foreach ($record['cancellationPoints'] as $cp) {
+                    if ($this->shouldSkipImportedCancellation($cp)) {
+                        $this->deleteImportedCancellation($cp);
+
+                        continue;
+                    }
+
                     $fallback_date = $this->parseFallbackDate($cp);
 
                     Cancellation::updateOrCreate(
@@ -218,6 +224,7 @@ class GratitudeService
                             'category' => $bp['category'] ?? null,
                             'type' => $bp['type'] ?? null,
                             'status' => $this->normalizeImportedBonusStatus($bp['status'] ?? null),
+                            'usable_date' => $usable_date,
                             'expires_at' => $this->pointExpiryService->calculateBonusExpiry($usable_date, $level),
                             'created_at' => ! empty($bp['created_at']) ? Carbon::parse($bp['created_at']) : null,
                             'updated_at' => ! empty($bp['updated_at']) ? Carbon::parse($bp['updated_at']) : null,
@@ -252,6 +259,8 @@ class GratitudeService
 
             if ($gratitude->gratitudeNumber) {
                 self::syncAccountBalance($gratitude->gratitudeNumber);
+                $this->syncImportedCancellationBreakdown($gratitude->gratitudeNumber);
+                $this->rebuildImportedLevelHistory($gratitude->gratitudeNumber);
             }
         }
     }
@@ -286,6 +295,8 @@ class GratitudeService
     {
         $points = abs((int) ($row['points'] ?? 0));
         if ($points === 0 || $this->isImportedExpirationAdjustment($row)) {
+            $this->deleteNegativeImportedCancellation($row, $source);
+
             return;
         }
 
@@ -336,6 +347,53 @@ class GratitudeService
         return str_contains($text, 'expir');
     }
 
+    private function shouldSkipImportedCancellation(array $row): bool
+    {
+        return in_array($this->normalizeImportDescription($row['description'] ?? null), [
+            'points expired (+2 years)',
+            'points expired (2+ years)',
+            'program retired',
+            'expired points',
+        ], true);
+    }
+
+    private function normalizeImportDescription(mixed $description): string
+    {
+        if (! is_scalar($description)) {
+            return '';
+        }
+
+        return trim(strtolower(preg_replace('/\s+/', ' ', (string) $description)));
+    }
+
+    private function deleteImportedCancellation(array $row): void
+    {
+        if (! empty($row['id'])) {
+            Cancellation::where('old_id', $row['id'])->delete();
+
+            return;
+        }
+
+        $description = $this->normalizeImportDescription($row['description'] ?? null);
+        if ($description === '') {
+            return;
+        }
+
+        Cancellation::query()
+            ->where('gratitudeNumber', $row['gratitudeNumber'] ?? null)
+            ->whereRaw('LOWER(TRIM(description)) = ?', [$description])
+            ->delete();
+    }
+
+    private function deleteNegativeImportedCancellation(array $row, string $source): void
+    {
+        $oldId = $this->negativeAdjustmentOldId($row['id'] ?? null, $source);
+
+        if ($oldId !== null) {
+            Cancellation::where('old_id', $oldId)->delete();
+        }
+    }
+
     private function negativeAdjustmentOldId(mixed $oldId, string $source): ?int
     {
         if ($oldId === null || $oldId === '') {
@@ -373,6 +431,217 @@ class GratitudeService
     protected function normalizeImportedBonusStatus(mixed $status): bool
     {
         return ! in_array($status, ['expired', false, 0, '0'], true);
+    }
+
+    private function syncImportedCancellationBreakdown(string $gratitudeNumber): void
+    {
+        $cancellations = Cancellation::where('gratitudeNumber', $gratitudeNumber)->get();
+
+        foreach ($cancellations as $cancellation) {
+            if (! empty($cancellation->points_breakdown)) {
+                continue;
+            }
+
+            $sources = EarnedPoint::where('cancel_id', $cancellation->id)
+                ->where('gratitudeNumber', $gratitudeNumber)
+                ->get()
+                ->concat(
+                    BonusPoint::where('cancel_id', $cancellation->id)
+                        ->where('gratitudeNumber', $gratitudeNumber)
+                        ->get()
+                );
+
+            if ($sources->isEmpty()) {
+                continue;
+            }
+
+            $allocations = $sources
+                ->map(function ($source) use ($cancellation) {
+                    $points = (int) $source->cancelled_points;
+                    if ($points <= 0) {
+                        $points = max(
+                            0,
+                            (int) $source->points - (int) $source->redeemed_points
+                        );
+                    }
+
+                    if ($points <= 0) {
+                        return null;
+                    }
+
+                    $effectiveDate = $this->pointEffectiveDate($source);
+                    $expiresAt = $source->expires_at ? Carbon::parse($source->expires_at) : null;
+                    $cancelledAt = $cancellation->date ? Carbon::parse($cancellation->date) : null;
+
+                    return [
+                        'source_type' => $source::class,
+                        'source_id' => $source->id,
+                        'source_old_id' => $source->old_id,
+                        'points' => $points,
+                        'remaining_after' => $source->remaining_points,
+                        'effective_date' => $effectiveDate?->toDateString(),
+                        'expires_at' => $expiresAt?->toDateString(),
+                        'cancellation_date' => $cancelledAt?->toDateString(),
+                    ];
+                })
+                ->filter()
+                ->values()
+                ->all();
+
+            if (! empty($allocations)) {
+                $cancellation->update(['points_breakdown' => $allocations]);
+            }
+        }
+    }
+
+    private function pointEffectiveDate(EarnedPoint|BonusPoint $point): ?Carbon
+    {
+        $date = $point->usable_date ?? $point->date ?? $point->created_at;
+
+        return $date ? Carbon::parse($date) : null;
+    }
+
+    private function rebuildImportedLevelHistory(string $gratitudeNumber): void
+    {
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->first();
+
+        if (! $gratitude || ! $gratitude->systemLevelUpdate) {
+            return;
+        }
+
+        $levels = GratitudeLevel::where('status', true)
+            ->orderBy('min_points')
+            ->get();
+
+        if ($levels->isEmpty()) {
+            return;
+        }
+
+        $now = Carbon::now();
+        $defaultLevel = $levels->first()->name;
+        $hierarchy = $levels
+            ->values()
+            ->mapWithKeys(fn ($level, $index) => [$level->name => $index + 1])
+            ->all();
+
+        $earnedPoints = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
+            ->activeStatus()
+            ->whereNotNull('usable_date')
+            ->where('usable_date', '<=', $now)
+            ->orderBy('usable_date')
+            ->orderBy('id')
+            ->get();
+
+        if ($earnedPoints->isEmpty()) {
+            $startDate = $gratitude->created_at
+                ? Carbon::parse($gratitude->created_at)
+                : $now;
+
+            $gratitude->update([
+                'level' => $defaultLevel,
+                'levelHistory' => [[
+                    'fromLevel' => $defaultLevel,
+                    'toLevel' => $defaultLevel,
+                    'changeType' => 'initial',
+                    'date' => $startDate->toDateString(),
+                    'earnedPoints' => 0,
+                    'changedBy' => 'import',
+                    'reason' => 'No effective earned points imported',
+                ]],
+                'level_obtained_at' => $startDate,
+                'statusChange' => 'initial',
+                'statusChangeReason' => 'No effective earned points imported',
+            ]);
+
+            return;
+        }
+
+        $history = [];
+        $runningEarnedPoints = 0;
+        $currentLevel = null;
+        $lastChangeDate = null;
+
+        foreach ($earnedPoints as $point) {
+            $effectiveDate = $this->pointEffectiveDate($point);
+            if (! $effectiveDate || $effectiveDate->isFuture()) {
+                continue;
+            }
+
+            $runningEarnedPoints += max(
+                0,
+                (int) $point->points - (int) $point->cancelled_points
+            );
+
+            $newLevel = $this->resolveImportedLevel($runningEarnedPoints, $levels);
+            if ($currentLevel === $newLevel) {
+                continue;
+            }
+
+            $changeType = $currentLevel === null
+                ? 'initial'
+                : $this->importedLevelChangeType($currentLevel, $newLevel, $hierarchy);
+
+            $history[] = [
+                'fromLevel' => $currentLevel ?? $newLevel,
+                'toLevel' => $newLevel,
+                'changeType' => $changeType,
+                'date' => $effectiveDate->toDateString(),
+                'earnedPoints' => $runningEarnedPoints,
+                'changedBy' => 'import',
+                'reason' => $changeType === 'initial'
+                    ? 'Level history rebuilt from first effective earned point'
+                    : $this->importedLevelChangeReason($changeType, $currentLevel, $newLevel),
+            ];
+
+            $currentLevel = $newLevel;
+            $lastChangeDate = $effectiveDate;
+        }
+
+        if (empty($history)) {
+            return;
+        }
+
+        $lastEntry = $history[array_key_last($history)];
+
+        $gratitude->update([
+            'level' => $lastEntry['toLevel'],
+            'levelHistory' => $history,
+            'level_obtained_at' => $lastChangeDate,
+            'statusChange' => $lastEntry['changeType'],
+            'statusChangeReason' => $lastEntry['reason'],
+        ]);
+    }
+
+    private function resolveImportedLevel(int $earnedPoints, Collection $levels): string
+    {
+        foreach ($levels->sortByDesc('min_points') as $level) {
+            if ($earnedPoints >= (int) $level->min_points) {
+                return $level->name;
+            }
+        }
+
+        return $levels->first()->name;
+    }
+
+    private function importedLevelChangeType(string $oldLevel, string $newLevel, array $hierarchy): string
+    {
+        $oldRank = $hierarchy[$oldLevel] ?? 1;
+        $newRank = $hierarchy[$newLevel] ?? 1;
+
+        if ($oldRank === $newRank) {
+            return 'maintained';
+        }
+
+        return $newRank > $oldRank ? 'upgrade' : 'downgrade';
+    }
+
+    private function importedLevelChangeReason(string $changeType, ?string $oldLevel, string $newLevel): string
+    {
+        return match ($changeType) {
+            'upgrade' => "Upgraded from {$oldLevel} to {$newLevel} from effective earned points",
+            'downgrade' => "Downgraded from {$oldLevel} to {$newLevel} from effective earned points",
+            default => "Level {$newLevel} maintained from effective earned points",
+        };
     }
 
     /**

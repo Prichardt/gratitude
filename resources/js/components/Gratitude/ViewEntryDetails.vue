@@ -28,6 +28,18 @@ const remainingPoints = () => {
         Number(props.item.points || 0) - Number(props.item.redeemed_points || 0) - cancelledPoints(),
     );
 };
+const effectiveDate = () => props.item.displayDate || props.item.usable_date || props.item.useable_date || props.item.date;
+const formatDate = (date: any, fallback = 'N/A') => {
+    if (!date) return fallback;
+
+    const parsed = new Date(date);
+
+    if (Number.isNaN(parsed.getTime())) {
+        return fallback;
+    }
+
+    return parsed.toISOString().split('T')[0];
+};
 </script>
 
 <template>
@@ -74,8 +86,8 @@ const remainingPoints = () => {
                                 <div class="font-bold text-sm mt-0.5 text-green-600 dark:text-green-400">{{ remainingPoints() }} pts</div>
                             </div>
                             <div class="bg-muted/30 p-3 rounded-lg border border-border/50">
-                                <span class="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Date</span>
-                                <div class="font-medium text-sm mt-0.5">{{ (item.displayDate || item.date) ? new Date(item.displayDate || item.date).toISOString().split('T')[0] : 'N/A' }}</div>
+                                <span class="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Effective Date</span>
+                                <div class="font-medium text-sm mt-0.5">{{ formatDate(effectiveDate()) }}</div>
                             </div>
                             <div class="bg-muted/30 p-3 rounded-lg border border-border/50">
                                 <span class="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Status</span>

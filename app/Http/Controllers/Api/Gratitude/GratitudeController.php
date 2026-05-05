@@ -13,10 +13,13 @@ use App\Models\Gratitude\BonusPoint;
 use App\Models\Gratitude\Cancellation;
 use App\Models\Gratitude\EarnedPoint;
 use App\Models\Gratitude\Gratitude;
+use App\Models\Gratitude\GratitudeLevel;
+use App\Models\Gratitude\RedeemPoints;
 use App\Services\Gratitude\BonusPointService;
 use App\Services\Gratitude\CancellationService;
 use App\Services\Gratitude\EarnedPointService;
 use App\Services\Gratitude\GratitudeService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -76,6 +79,108 @@ class GratitudeController extends Controller
         $data = $this->gratitudeService->gratitudeDataByNumber($gratitudeNumber);
 
         return response()->json($data);
+    }
+
+    public function balance(string $gratitudeNumber)
+    {
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
+
+        return response()->json([
+            'gratitudeNumber' => $gratitude->gratitudeNumber,
+            'balance' => [
+                'total_points' => (int) $gratitude->totalPoints,
+                'earned_points' => (int) $gratitude->totalEarnedPoints,
+                'bonus_points' => (int) $gratitude->totalBonusPoints,
+                'usable_points' => (int) $gratitude->useablePoints,
+                'non_usable_points' => (int) $gratitude->nonUseablePoints,
+                'remaining_points' => (int) $gratitude->totalRemainingPoints,
+                'redeemed_points' => (int) $gratitude->totalRedeemedPoints,
+                'cancelled_points' => (int) $gratitude->totalCancelledPoints,
+                'expired_points' => (int) $gratitude->totalExpiredPoints,
+                'pending_points' => (int) EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
+                    ->where('status', 'pending')
+                    ->sum('points'),
+            ],
+            'last_activity_at' => $gratitude->last_activity_at?->toISOString(),
+        ]);
+    }
+
+    public function level(string $gratitudeNumber)
+    {
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
+        $level = GratitudeLevel::where('name', $gratitude->level)->first();
+
+        return response()->json([
+            'gratitudeNumber' => $gratitude->gratitudeNumber,
+            'level' => [
+                'name' => $gratitude->level,
+                'obtained_at' => $gratitude->level_obtained_at?->toDateString(),
+                'history' => $gratitude->levelHistory ?? [],
+                'status_change' => $gratitude->statusChange,
+                'status_change_reason' => $gratitude->statusChangeReason,
+                'system_level_update' => (bool) $gratitude->systemLevelUpdate,
+            ],
+            'level_rules' => $level ? [
+                'min_points' => (int) $level->min_points,
+                'max_points' => $level->max_points !== null ? (int) $level->max_points : null,
+                'redemption_points_per_dollar' => (float) $level->redemption_points_per_dollar,
+                'partner_points_per_dollar' => (float) ($level->partner_points_per_dollar ?: $level->redemption_points_per_dollar),
+                'earned_expire_days' => (int) $level->earned_expire_days,
+                'bonus_expire_days' => (int) $level->bonus_expire_days,
+            ] : null,
+        ]);
+    }
+
+    public function benefitsByLevel(string $level)
+    {
+        $levelModel = GratitudeLevel::where('name', $level)->firstOrFail();
+
+        $benefits = $levelModel->benefits()
+            ->where('gratitude_benefits.is_active', true)
+            ->wherePivot('is_active', true)
+            ->get()
+            ->map(fn ($benefit) => [
+                'id' => $benefit->id,
+                'name' => $benefit->name,
+                'benefit_key' => $benefit->benefit_key,
+                'type' => $benefit->type,
+                'description' => $benefit->pivot->description ?: $benefit->description,
+                'value' => $benefit->pivot->value,
+                'value_type' => $benefit->pivot->value_type,
+                'calculation' => $benefit->pivot->calculation,
+                'web_status' => (bool) $benefit->pivot->web_status,
+            ])
+            ->values();
+
+        return response()->json([
+            'level' => [
+                'name' => $levelModel->name,
+                'min_points' => (int) $levelModel->min_points,
+                'max_points' => $levelModel->max_points !== null ? (int) $levelModel->max_points : null,
+            ],
+            'benefits' => $benefits,
+        ]);
+    }
+
+    public function pointsHistory(string $gratitudeNumber)
+    {
+        Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
+
+        $earnedPoints = EarnedPoint::with(['redemptions.redeemPoint'])
+            ->where('gratitudeNumber', $gratitudeNumber)
+            ->get();
+        $bonusPoints = BonusPoint::with(['redemptions.redeemPoint'])
+            ->where('gratitudeNumber', $gratitudeNumber)
+            ->get();
+        $cancellations = Cancellation::where('gratitudeNumber', $gratitudeNumber)->get();
+        $redemptions = RedeemPoints::with('details')
+            ->where('gratitudeNumber', $gratitudeNumber)
+            ->get();
+
+        return response()->json([
+            'gratitudeNumber' => $gratitudeNumber,
+            'history' => $this->buildPointsHistory($earnedPoints, $bonusPoints, $cancellations, $redemptions),
+        ]);
     }
 
     // Earned Points
@@ -183,5 +288,73 @@ class GratitudeController extends Controller
         }
 
         return response()->json(['message' => 'Redemption deleted']);
+    }
+
+    private function buildPointsHistory($earnedPoints, $bonusPoints, $cancellations, $redemptions)
+    {
+        $history = collect();
+        $redemptionIdsFromPointDetails = collect();
+
+        foreach ($earnedPoints as $point) {
+            $history->push($this->historyEntry('earned', $point->usable_date ?? $point->date ?? $point->created_at, $point->points, $point->description ?: 'Earned points', 'EarnedPoint', $point->id));
+
+            foreach (($point->redemptions ?? []) as $detail) {
+                $redemptionIdsFromPointDetails->push($detail->redeem_id);
+                $history->push($this->historyEntry('redemption', $detail->created_at, -1 * (int) $detail->points, $detail->redeemPoint?->reason ?: 'Point redemption', 'EarnedPoint', $point->id));
+            }
+
+            if ((int) $point->expired_points > 0) {
+                $history->push($this->historyEntry('expiration', $point->expires_at, -1 * (int) $point->expired_points, 'Points expired', 'EarnedPoint', $point->id));
+            }
+        }
+
+        foreach ($bonusPoints as $point) {
+            $history->push($this->historyEntry('bonus', $point->usable_date ?? $point->date ?? $point->created_at, $point->points, $point->description ?: 'Bonus points', 'BonusPoint', $point->id));
+
+            foreach (($point->redemptions ?? []) as $detail) {
+                $redemptionIdsFromPointDetails->push($detail->redeem_id);
+                $history->push($this->historyEntry('redemption', $detail->created_at, -1 * (int) $detail->points, $detail->redeemPoint?->reason ?: 'Point redemption', 'BonusPoint', $point->id));
+            }
+
+            if ((int) $point->expired_points > 0) {
+                $history->push($this->historyEntry('expiration', $point->expires_at, -1 * (int) $point->expired_points, 'Points expired', 'BonusPoint', $point->id));
+            }
+        }
+
+        foreach ($cancellations as $cancel) {
+            $history->push($this->historyEntry('cancellation', $cancel->date ?? $cancel->created_at, -1 * (int) $cancel->points, $cancel->description ?: 'Point cancellation', 'Cancellation', $cancel->id));
+        }
+
+        foreach ($redemptions as $redemption) {
+            if ($redemptionIdsFromPointDetails->contains($redemption->id)) {
+                continue;
+            }
+
+            $history->push($this->historyEntry('redemption', $redemption->created_at, -1 * (int) $redemption->points, $redemption->reason ?: 'Point redemption', 'RedeemPoints', $redemption->id));
+        }
+
+        return $history
+            ->sortByDesc(fn ($entry) => $entry['sort_date'] ?? '')
+            ->values()
+            ->map(function ($entry) {
+                unset($entry['sort_date']);
+
+                return $entry;
+            });
+    }
+
+    private function historyEntry(string $type, mixed $date, int|float|null $points, string $description, string $sourceType, int|string|null $sourceId): array
+    {
+        $parsedDate = $date ? Carbon::parse($date) : null;
+
+        return [
+            'type' => $type,
+            'date' => $parsedDate?->toDateString(),
+            'sort_date' => $parsedDate?->toISOString(),
+            'points' => (int) ($points ?? 0),
+            'description' => $description,
+            'source_type' => $sourceType,
+            'source_id' => $sourceId,
+        ];
     }
 }

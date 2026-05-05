@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\InternalApi\Gratitude\EarnedBenefitController;
 use App\Http\Controllers\InternalApi\Gratitude\GratitudeBenefitController;
 use App\Http\Controllers\InternalApi\Gratitude\GratitudeController;
 use Illuminate\Support\Facades\Route;
@@ -46,6 +47,13 @@ Route::name('gratitude.')->prefix('gratitude/')
 
         // Sync balance
         Route::post('{gratitudeNumber}/sync-balance', [GratitudeController::class, 'apiSyncBalance'])->name('sync-balance');
+
+        // Earned Benefits
+        Route::get('{gratitudeNumber}/earned-benefits', [EarnedBenefitController::class, 'index'])->name('earned-benefits.index');
+        Route::post('{gratitudeNumber}/earned-benefits', [EarnedBenefitController::class, 'store'])->name('earned-benefits.store');
+        Route::put('{gratitudeNumber}/earned-benefits/{id}', [EarnedBenefitController::class, 'update'])->name('earned-benefits.update');
+        Route::delete('{gratitudeNumber}/earned-benefits/{id}', [EarnedBenefitController::class, 'destroy'])->name('earned-benefits.destroy');
+        Route::get('{gratitudeNumber}/earned-benefits/{id}/log', [EarnedBenefitController::class, 'activityLog'])->name('earned-benefits.log');
 
         // Redemption CRUD
         Route::post('{gratitudeNumber}/redeem', [GratitudeController::class, 'apiAddRedeem'])->name('redeem');

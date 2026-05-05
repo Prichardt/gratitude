@@ -13,6 +13,7 @@ use App\Models\Gratitude\Cancellation;
 use App\Models\Gratitude\EarnedPoint;
 use App\Models\Gratitude\Gratitude;
 use App\Models\Gratitude\GratitudeBenefit;
+use App\Models\Gratitude\GratitudeEarnedBenefit;
 use App\Models\Gratitude\GratitudeLevel;
 use App\Models\Gratitude\GratitudeReserve;
 use App\Models\Gratitude\RedeemPoints;
@@ -230,6 +231,16 @@ class GratitudeController extends Controller
             }
         }
 
+        $earnedBenefits = GratitudeEarnedBenefit::where('gratitudeNumber', $gratitudeNumber)
+            ->with('benefit')
+            ->orderByDesc('date')
+            ->orderByDesc('id')
+            ->get();
+
+        $availableBenefits = GratitudeBenefit::where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'benefit_key', 'description', 'type']);
+
         $data = [
             'gratitude' => $gratitude,
             'guests' => $guests,
@@ -238,7 +249,9 @@ class GratitudeController extends Controller
             'bonus_points' => $bonusPoints,
             'cancellations' => $cancellations,
             'redemptions' => $redemptions,
-            'points_history' => $this->buildPointsHistory($earnedPoints, $bonusPoints, $cancellations, $redemptions),
+            'earned_benefits' => $earnedBenefits,
+            'available_benefits' => $availableBenefits,
+            'points_history' => $this->buildPointsHistory($earnedPoints, $bonusPoints, $cancellations, $redemptions, $gratitude),
             'next_level' => $nextLevel,
             'points_to_next_level' => $pointsToNextLevel,
             'rolling_tier_points' => $rollingTotalActive,
@@ -437,12 +450,12 @@ class GratitudeController extends Controller
         }
     }
 
-    private function buildPointsHistory($earnedPoints, $bonusPoints, $cancellations, $redemptions)
+    private function buildPointsHistory($earnedPoints, $bonusPoints, $cancellations, $redemptions, ?Gratitude $gratitude = null)
     {
         $history = collect();
 
         foreach ($earnedPoints as $point) {
-            $history->push($this->historyEntry('earned', $point->date ?? $point->created_at, $point->points, $point->description ?: 'Earned points', 'EarnedPoint', $point->id));
+            $history->push($this->historyEntry('earned', $point->usable_date ?? $point->date ?? $point->created_at, $point->points, $point->description ?: 'Earned points', 'EarnedPoint', $point->id));
 
             foreach (($point->redemptions ?? []) as $detail) {
                 $history->push($this->historyEntry('redemption', $detail->created_at, -1 * (int) $detail->points, $detail->redeemPoint?->reason ?: 'Point redemption', 'EarnedPoint', $point->id));
@@ -458,7 +471,7 @@ class GratitudeController extends Controller
         }
 
         foreach ($bonusPoints as $point) {
-            $history->push($this->historyEntry('bonus', $point->date ?? $point->created_at, $point->points, $point->description ?: 'Bonus points', 'BonusPoint', $point->id));
+            $history->push($this->historyEntry('bonus', $point->usable_date ?? $point->date ?? $point->created_at, $point->points, $point->description ?: 'Bonus points', 'BonusPoint', $point->id));
 
             foreach (($point->redemptions ?? []) as $detail) {
                 $history->push($this->historyEntry('redemption', $detail->created_at, -1 * (int) $detail->points, $detail->redeemPoint?->reason ?: 'Point redemption', 'BonusPoint', $point->id));
@@ -480,6 +493,29 @@ class GratitudeController extends Controller
 
         foreach ($cancellations->whereNotIn('id', $allocatedCancellationIds) as $cancel) {
             $history->push($this->historyEntry('cancellation', $cancel->date ?? $cancel->created_at, -1 * (int) $cancel->points, $cancel->description ?: 'Point cancellation', 'Cancellation', $cancel->id));
+        }
+
+        // Inject level change events so the timeline shows upgrades and downgrades inline
+        if ($gratitude && is_array($gratitude->levelHistory)) {
+            foreach ($gratitude->levelHistory as $entry) {
+                $changeType = $entry['changeType'] ?? 'maintained';
+                $entryDate  = $entry['date'] ?? null;
+                $parsedDate = $entryDate ? Carbon::parse($entryDate) : null;
+
+                $history->push([
+                    'type'                   => 'level_' . $changeType,
+                    'date'                   => $parsedDate?->toDateString(),
+                    'sort_date'              => $parsedDate?->toISOString() ?? '',
+                    'points'                 => 0,
+                    'description'            => $entry['reason'] ?? 'Level changed',
+                    'source_type'            => 'LevelHistory',
+                    'source_id'              => null,
+                    'level_from'             => $entry['fromLevel'] ?? null,
+                    'level_to'               => $entry['toLevel'] ?? null,
+                    'change_type'            => $changeType,
+                    'earned_points_at_change' => (int) ($entry['earnedPoints'] ?? 0),
+                ]);
+            }
         }
 
         return $history

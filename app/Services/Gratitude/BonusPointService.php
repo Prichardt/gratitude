@@ -3,6 +3,7 @@
 namespace App\Services\Gratitude;
 
 use App\Models\Gratitude\BonusPoint;
+use App\Models\Gratitude\Cancellation;
 use App\Models\Gratitude\Gratitude;
 use Carbon\Carbon;
 
@@ -16,13 +17,14 @@ class BonusPointService
         $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
 
         $point = BonusPoint::create([
-            'user_id'        => $gratitude->user_id,
+            'user_id' => $gratitude->user_id,
             'gratitudeNumber' => $gratitude->gratitudeNumber,
-            'date'           => $effectiveDate,
-            'description'    => $data['description'],
-            'points'         => $data['points'],
-            'expires_at'     => $this->pointExpiryService->calculateBonusExpiry($effectiveDate, $level),
-            'status'         => true,
+            'date' => $effectiveDate,
+            'description' => $data['description'],
+            'points' => $data['points'],
+            'usable_date' => $effectiveDate,
+            'expires_at' => $this->pointExpiryService->calculateBonusExpiry($effectiveDate, $level),
+            'status' => true,
         ]);
 
         GratitudeService::syncAccountBalance($gratitude->gratitudeNumber);
@@ -35,24 +37,25 @@ class BonusPointService
         $effectiveDate = Carbon::parse($data['date']);
         $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
 
-        if (!empty($data['expires_at'])) {
+        if (! empty($data['expires_at'])) {
             $expiresAt = Carbon::parse($data['expires_at']);
-            $isManual  = true;
+            $isManual = true;
         } elseif ($point->expires_at_manual) {
             $expiresAt = $point->expires_at;
-            $isManual  = true;
+            $isManual = true;
         } else {
             $expiresAt = $this->pointExpiryService->calculateBonusExpiry($effectiveDate, $level);
-            $isManual  = false;
+            $isManual = false;
         }
 
         $point->update([
-            'date'           => $effectiveDate,
-            'description'    => $data['description'],
-            'points'         => $data['points'],
-            'expires_at'     => $expiresAt,
+            'date' => $effectiveDate,
+            'description' => $data['description'],
+            'points' => $data['points'],
+            'usable_date' => $effectiveDate,
+            'expires_at' => $expiresAt,
             'expires_at_manual' => $isManual,
-            'status'         => true,
+            'status' => true,
         ]);
 
         GratitudeService::syncAccountBalance($gratitude->gratitudeNumber);
@@ -65,7 +68,7 @@ class BonusPointService
         $gratitudeNumber = $point->gratitudeNumber;
 
         if ($point->cancel_id) {
-            \App\Models\Gratitude\Cancellation::where('id', $point->cancel_id)->delete();
+            Cancellation::where('id', $point->cancel_id)->delete();
         }
 
         $point->delete();

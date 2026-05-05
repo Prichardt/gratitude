@@ -68,7 +68,12 @@ class TierService
         $intervalEnd = $intervalStart->copy()->addYears($intervalYears);
         $intervalExpired = $now->greaterThan($intervalEnd);
 
-        // Earned journey points in the current membership interval. Redeemed points do not
+        // When the interval has expired, evaluate only the closed window [intervalStart, intervalEnd]
+        // so that points earned after expiry correctly count toward the fresh window.
+        // During an active window evaluate up to now (supports mid-interval upgrades).
+        $pointsUpperBound = $intervalExpired ? $intervalEnd : $now;
+
+        // Earned journey points within the evaluation window. Redeemed points do not
         // reduce tier qualification; cancellations do.
         $earnedInInterval = (int) EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
             ->activeStatus()
@@ -76,18 +81,22 @@ class TierService
             ->whereNotNull('journey_id')
             ->whereNotNull('usable_date')
             ->where('usable_date', '>=', $intervalStart)
-            ->where('usable_date', '<=', $now)
+            ->where('usable_date', '<=', $pointsUpperBound)
             ->sum(DB::raw('CASE WHEN COALESCE(points, 0) - COALESCE(cancelled_points, 0) > 0 THEN COALESCE(points, 0) - COALESCE(cancelled_points, 0) ELSE 0 END'));
 
         $oldLevel = $gratitude->level ?? self::TIER_EXPLORER;
-        $newLevel = $this->resolveLevel($earnedInInterval, $gratitudeNumber, $intervalStart, $now, $allLevels);
+        $newLevel = $this->resolveLevel($earnedInInterval, $gratitudeNumber, $intervalStart, $pointsUpperBound, $allLevels);
 
         $hierarchy = $this->buildHierarchy($allLevels);
         $oldRank = $hierarchy[$oldLevel] ?? 1;
         $newRank = $hierarchy[$newLevel] ?? 1;
 
         if (! $gratitude->level || $newRank > $oldRank || $intervalExpired) {
-            $this->applyLevelChange($gratitude, $oldLevel, $newLevel, $earnedInInterval, $changedBy, $now);
+            // For an expired interval: new window starts at intervalEnd so any points earned
+            // after the old window closes are counted in the next recalculation.
+            // For an upgrade mid-interval: window restarts from now.
+            $newIntervalStart = $intervalExpired ? $intervalEnd : $now;
+            $this->applyLevelChange($gratitude, $oldLevel, $newLevel, $earnedInInterval, $changedBy, $now, $newIntervalStart);
         }
 
         return $gratitude->fresh();
@@ -232,6 +241,10 @@ class TierService
 
     /**
      * Apply a level change (or a no-change interval renewal), persist history, and save.
+     *
+     * @param  Carbon|null  $levelObtainedAt  Start of the new interval. Defaults to $now.
+     *                                         Pass $intervalEnd when triggered by expiry so
+     *                                         any activity after the window counts next time.
      */
     private function applyLevelChange(
         Gratitude $gratitude,
@@ -239,7 +252,8 @@ class TierService
         string $newLevel,
         int $earnedPoints,
         string $changedBy,
-        Carbon $now
+        Carbon $now,
+        ?Carbon $levelObtainedAt = null
     ): void {
         $changeType = $this->determineStatusChange($oldLevel, $newLevel);
 
@@ -256,7 +270,7 @@ class TierService
         $gratitude->update([
             'level' => $newLevel,
             'levelHistory' => $history,
-            'level_obtained_at' => $now,
+            'level_obtained_at' => $levelObtainedAt ?? $now,
             'statusChange' => $changeType,
             'statusChangeReason' => $this->buildChangeReason($changeType, $oldLevel, $newLevel),
         ]);
@@ -328,8 +342,8 @@ class TierService
     private function buildChangeReason(?string $changeType, string $fromLevel, string $toLevel): string
     {
         return match ($changeType) {
-            'upgrade' => "Upgraded from {$fromLevel} to {$toLevel} — points threshold met",
-            'downgrade' => "Downgraded from {$fromLevel} to {$toLevel} — points dropped below threshold",
+            'upgrade' => "Upgraded from {$fromLevel} to {$toLevel} — points threshold met, 2-year window restarted",
+            'downgrade' => "Downgraded from {$fromLevel} to {$toLevel} — 2-year window expired with insufficient qualifying activity",
             'maintained' => "Level {$fromLevel} maintained — 2-year window renewed",
             default => "Level set to {$toLevel}",
         };

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, LayoutGrid, Shield, Heart } from 'lucide-vue-next';
+import { HeartHandshake, LayoutGrid, Shield } from 'lucide-vue-next';
 import AppLogo from '@/components/AppLogo.vue';
-import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import {
@@ -24,27 +23,27 @@ const mainNavItems: NavItem[] = [
         icon: LayoutGrid,
     },
     {
-        title: 'Gratitude Program',
+        title: 'Gratitude Service',
         href: '#',
-        icon: Heart,
+        icon: HeartHandshake,
         children: [
-            { title: 'Overview', href: '/gratitude' },
-            { title: 'Gratitude Accounts', href: '/gratitude/accounts' },
-            { title: 'Gratitude Levels', href: '/gratitude/levels' },
-            { title: 'Gratitude Benefits', href: '/gratitude/benefits' },
-            { title: 'Gratitude Reserve', href: '/gratitude/reserve' },
-            { title: 'Program Level Benefits', href: '/gratitude/program-level-benefits' },
+            { title: 'Service Overview', href: '/gratitude' },
+            { title: 'Accounts & Balances', href: '/gratitude/accounts' },
+            { title: 'Levels', href: '/gratitude/levels' },
+            { title: 'Benefits', href: '/gratitude/benefits' },
+            { title: 'Point Reserve', href: '/gratitude/reserve' },
+            { title: 'Level Benefit Matrix', href: '/gratitude/program-level-benefits' },
         ],
     },
     {
-        title: 'Auth & Security',
+        title: 'Access & Integrations',
         href: '#',
         icon: Shield,
         children: [
+            { title: 'Application Keys', href: '/application-keys' },
             { title: 'Users', href: '/users' },
             { title: 'Roles', href: '/roles' },
             { title: 'Permissions', href: '/permissions' },
-            { title: 'Application Keys', href: '/application-keys' },
         ],
     },
 ];

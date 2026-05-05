@@ -39,7 +39,7 @@ const submit = async () => {
                 <h2 class="text-xl font-bold mb-4">Add Bonus Points</h2>
                 <form @submit.prevent="submit" class="space-y-4">
                     <div>
-                        <Label>Date</Label>
+                        <Label>Effective Date</Label>
                         <Input type="date" v-model="form.date" required />
                     </div>
                     <div>
@@ -51,7 +51,7 @@ const submit = async () => {
                         <Input type="number" v-model="form.points" required />
                     </div>
                     <p class="text-xs text-muted-foreground">
-                        Bonus points on this level expire after {{ props.expireDays }} days from the selected date.
+                        Bonus points on this level expire after {{ props.expireDays }} days from the effective date.
                     </p>
                     <div class="flex justify-end space-x-2 mt-6">
                         <Button type="button" variant="outline" @click="isOpen = false">Cancel</Button>

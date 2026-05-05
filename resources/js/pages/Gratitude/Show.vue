@@ -16,9 +16,12 @@ import DeleteRedemption from '@/components/Gratitude/DeleteRedemption.vue';
 import UpdateRedemption from '@/components/Gratitude/UpdateRedemption.vue';
 import ViewEntryDetails from '@/components/Gratitude/ViewEntryDetails.vue';
 import ViewRedemptionDetails from '@/components/Gratitude/ViewRedemptionDetails.vue';
+import AddEarnedBenefit from '@/components/Gratitude/AddEarnedBenefit.vue';
+import UpdateEarnedBenefit from '@/components/Gratitude/UpdateEarnedBenefit.vue';
+import DeleteEarnedBenefit from '@/components/Gratitude/DeleteEarnedBenefit.vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, ChevronDown, Award, History, Gift, ShieldAlert, Zap, Clock, RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-vue-next';
+import { ArrowLeft, ChevronDown, Award, History, Gift, ShieldAlert, Zap, Clock, RefreshCw, TrendingUp, TrendingDown, Minus, Star, ScrollText } from 'lucide-vue-next';
 
 const props = defineProps({
     gratitudeNumber: {
@@ -52,6 +55,8 @@ const data = ref<any>({
     interval_end: null,
     interval_years: 2,
     current_level_min: 0,
+    earned_benefits: [],
+    available_benefits: [],
 });
 
 const fetchDetails = async () => {
@@ -106,6 +111,18 @@ const pointRemaining = (p: any) => p.remaining_points !== undefined && p.remaini
 const pointIsFullyCancelled = (p: any) => pointCancelled(p) > 0 && pointRemaining(p) === 0;
 const cancellationList = (p: any) => p.cancellations_list || [];
 const hasAllocatedCancellation = (c: any) => Array.isArray(c.points_breakdown) && c.points_breakdown.length > 0;
+const effectiveDateValue = (p: any) => p?.usable_date || p?.useable_date || p?.displayDate || p?.date || p?.created_at || '';
+const formatDate = (date: any, fallback = 'N/A') => {
+    if (!date) return fallback;
+
+    const parsed = new Date(date);
+
+    if (Number.isNaN(parsed.getTime())) {
+        return fallback;
+    }
+
+    return parsed.toISOString().split('T')[0];
+};
 
 // Combine Tier Points + Cancellations
 const combinedTierPoints = computed(() => {
@@ -118,7 +135,7 @@ const combinedTierPoints = computed(() => {
             ...p,
             rowType: 'earned',
             isExpired,
-            displayDate: p.date,
+            displayDate: effectiveDateValue(p),
             displayProject: p.project_data ? `${p.project_data.projectNumber || p.project_data.number || ''} - ${p.project_data.name || p.project_data.title || p.category}` : p.category, 
             displaySubtitle: p.project_data ? (p.project_data.subtitle || p.project_data.type || '') : '',
             displayPoints: p.points,
@@ -129,7 +146,7 @@ const combinedTierPoints = computed(() => {
             cancellationData: p.cancellation || null,
             cancellationsList: cancellationList(p),
             redemptionsList: buildRedemptionsList(p),
-            sortDate: p.date
+            sortDate: effectiveDateValue(p)
         };
     });
 
@@ -168,11 +185,12 @@ const combinedBonusPoints = computed(() => {
             isExpired,
             hasCancellation,
             isFullyCancelled: pointIsFullyCancelled(p),
+            displayDate: effectiveDateValue(p),
             cancellationData: p.cancellation || null,
             cancellationsList: cancellationList(p),
             redemptionsList: buildRedemptionsList(p)
         };
-    }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }).sort((a: any, b: any) => new Date(effectiveDateValue(b)).getTime() - new Date(effectiveDateValue(a)).getTime());
 });
 
 // Normalize redemption history from both RedeemPointsDetails records and the legacy redemption_history JSON column
@@ -206,6 +224,28 @@ const isRedeemOpen = ref(false);
 const isBenefitsOpen = ref(false);
 const isPointsHistoryOpen = ref(false);
 const isLevelHistoryOpen = ref(false);
+const isEarnedBenefitsOpen = ref(false);
+
+// Activity log modal
+const activityLog = ref<any[]>([]);
+const activityLogLoading = ref(false);
+const activityLogBenefitId = ref<number | null>(null);
+const isActivityLogOpen = ref(false);
+
+const viewActivityLog = async (benefit: any) => {
+    activityLogBenefitId.value = benefit.id;
+    activityLog.value = [];
+    isActivityLogOpen.value = true;
+    activityLogLoading.value = true;
+    try {
+        const res = await axios.get(`/internal-api/gratitude/${props.gratitudeNumber}/earned-benefits/${benefit.id}/log`);
+        activityLog.value = res.data.log ?? [];
+    } catch {
+        activityLog.value = [];
+    } finally {
+        activityLogLoading.value = false;
+    }
+};
 
 // Level progress helpers
 const levelProgressPct = computed(() => {
@@ -402,7 +442,7 @@ const formatNumber = (num: number) => {
                                     <p class="text-xs text-muted-foreground mt-0.5">{{ entry.reason }}</p>
                                 </div>
                                 <div class="text-right shrink-0">
-                                    <p class="text-xs font-medium text-foreground">{{ entry.date }}</p>
+                                    <p class="text-xs font-medium text-foreground">{{ formatDate(entry.date) }}</p>
                                     <p class="text-[10px] text-muted-foreground">{{ formatNumber(entry.earnedPoints) }} pts</p>
                                 </div>
                             </div>
@@ -529,20 +569,56 @@ const formatNumber = (num: number) => {
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-border bg-card">
-                                    <tr v-for="entry in data.points_history" :key="`${entry.type}-${entry.source_type}-${entry.source_id}-${entry.date}-${entry.points}`" class="hover:bg-muted/30 transition-colors">
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-foreground">{{ entry.date || 'N/A' }}</td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-                                                :class="entry.points >= 0 ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'">
-                                                {{ entry.type }}
-                                            </span>
-                                        </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-muted-foreground">{{ entry.source_type }} #{{ entry.source_id }}</td>
-                                        <td class="px-6 py-4 text-sm text-foreground/80">{{ entry.description }}</td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-right" :class="entry.points >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
-                                            {{ entry.points >= 0 ? '+' : '' }}{{ formatNumber(entry.points) }}
-                                        </td>
-                                    </tr>
+                                    <template v-for="entry in data.points_history" :key="`${entry.type}-${entry.source_type}-${entry.source_id}-${entry.date}-${entry.points}`">
+                                        <!-- Level change row -->
+                                        <tr v-if="entry.source_type === 'LevelHistory'"
+                                            :class="[
+                                                'transition-colors border-l-4',
+                                                entry.change_type === 'upgrade'   ? 'bg-green-50/60 dark:bg-green-950/20 border-l-green-500' :
+                                                entry.change_type === 'downgrade' ? 'bg-red-50/60 dark:bg-red-950/20 border-l-red-500' :
+                                                'bg-blue-50/40 dark:bg-blue-950/10 border-l-blue-400'
+                                            ]">
+                                            <td class="whitespace-nowrap px-6 py-3 text-sm font-medium text-foreground">{{ formatDate(entry.date) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-3 text-sm">
+                                                <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                                                    :class="entry.change_type === 'upgrade'   ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400' :
+                                                            entry.change_type === 'downgrade' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400' :
+                                                            'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400'">
+                                                    <component :is="entry.change_type === 'upgrade' ? TrendingUp : entry.change_type === 'downgrade' ? TrendingDown : Star" class="w-3 h-3" />
+                                                    Level {{ entry.change_type }}
+                                                </span>
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-3 text-sm">
+                                                <span class="flex items-center gap-1.5 font-semibold"
+                                                    :class="entry.change_type === 'upgrade' ? 'text-green-700 dark:text-green-400' : entry.change_type === 'downgrade' ? 'text-red-700 dark:text-red-400' : 'text-blue-700 dark:text-blue-400'">
+                                                    {{ entry.level_from }}
+                                                    <TrendingUp v-if="entry.change_type === 'upgrade'" class="w-3.5 h-3.5" />
+                                                    <TrendingDown v-else-if="entry.change_type === 'downgrade'" class="w-3.5 h-3.5" />
+                                                    <Minus v-else class="w-3.5 h-3.5" />
+                                                    {{ entry.level_to }}
+                                                </span>
+                                            </td>
+                                            <td class="px-6 py-3 text-sm text-foreground/70 italic">{{ entry.description }}</td>
+                                            <td class="whitespace-nowrap px-6 py-3 text-sm font-semibold text-right text-muted-foreground">
+                                                {{ formatNumber(entry.earned_points_at_change) }} pts
+                                            </td>
+                                        </tr>
+                                        <!-- Normal point event row -->
+                                        <tr v-else class="hover:bg-muted/30 transition-colors">
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-foreground">{{ formatDate(entry.date) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                                                    :class="entry.points >= 0 ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'">
+                                                    {{ entry.type }}
+                                                </span>
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-muted-foreground">{{ entry.source_type }} #{{ entry.source_id }}</td>
+                                            <td class="px-6 py-4 text-sm text-foreground/80">{{ entry.description }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-right" :class="entry.points >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
+                                                {{ entry.points >= 0 ? '+' : '' }}{{ formatNumber(entry.points) }}
+                                            </td>
+                                        </tr>
+                                    </template>
                                     <tr v-if="!data.points_history || data.points_history.length === 0">
                                         <td colspan="5" class="px-6 py-8 text-center text-sm text-muted-foreground">No point history recorded.</td>
                                     </tr>
@@ -551,6 +627,158 @@ const formatNumber = (num: number) => {
                         </div>
                     </div>
                 </Card>
+
+                <!-- Earned Benefits Card -->
+                <Card class="shadow-sm border-border overflow-hidden transition-all duration-300">
+                    <div class="bg-card hover:bg-muted/30 transition-colors px-6 py-4 flex items-center justify-between cursor-pointer border-b border-transparent" :class="{'border-border': isEarnedBenefitsOpen}" @click="isEarnedBenefitsOpen = !isEarnedBenefitsOpen">
+                        <div class="flex items-center gap-3">
+                            <div class="bg-violet-500/10 dark:bg-violet-500/20 p-2 rounded-md">
+                                <ScrollText class="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                            </div>
+                            <div>
+                                <h2 class="text-base font-semibold text-foreground tracking-tight">Earned Benefits</h2>
+                                <p class="text-xs text-muted-foreground mt-0.5">Benefits used or earned on this account</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <div @click.stop>
+                                <AddEarnedBenefit
+                                    :gratitudeNumber="gratitudeNumber"
+                                    :availableBenefits="data.available_benefits"
+                                    @saved="fetchDetails"
+                                />
+                            </div>
+                            <ChevronDown class="w-5 h-5 text-muted-foreground transition-transform duration-200" :class="{'rotate-180': isEarnedBenefitsOpen}" />
+                        </div>
+                    </div>
+                    <div v-show="isEarnedBenefitsOpen" class="p-0 border-t border-border bg-card">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-border">
+                                <thead class="bg-muted/30">
+                                    <tr>
+                                        <th class="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
+                                        <th class="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Benefit</th>
+                                        <th class="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Value</th>
+                                        <th class="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Journey ID</th>
+                                        <th class="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Project</th>
+                                        <th class="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Description</th>
+                                        <th class="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                                        <th class="px-5 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border bg-card">
+                                    <tr v-for="eb in data.earned_benefits" :key="eb.id" class="hover:bg-muted/30 transition-colors">
+                                        <td class="whitespace-nowrap px-5 py-3.5 text-sm font-medium text-foreground">{{ formatDate(eb.date) }}</td>
+                                        <td class="whitespace-nowrap px-5 py-3.5">
+                                            <p class="text-sm font-semibold text-foreground">{{ eb.benefit_name }}</p>
+                                            <p v-if="eb.benefit_key" class="text-[10px] text-muted-foreground font-mono mt-0.5">{{ eb.benefit_key }}</p>
+                                        </td>
+                                        <td class="whitespace-nowrap px-5 py-3.5">
+                                            <span v-if="eb.benefit_value" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
+                                                {{ eb.benefit_value }}
+                                                <span v-if="eb.value_type" class="opacity-70">· {{ eb.value_type }}</span>
+                                            </span>
+                                            <span v-else class="text-muted-foreground text-xs">—</span>
+                                        </td>
+                                        <td class="whitespace-nowrap px-5 py-3.5 text-sm text-muted-foreground">
+                                            <span v-if="eb.journey_id">{{ eb.journey_id }}</span>
+                                            <span v-else class="text-xs">—</span>
+                                        </td>
+                                        <td class="whitespace-nowrap px-5 py-3.5 text-sm text-muted-foreground max-w-[140px] truncate">
+                                            <template v-if="eb.project_data">
+                                                <span class="font-medium text-foreground/80">{{ eb.project_data.projectNumber || eb.project_data.number || '' }}</span>
+                                                <span v-if="eb.project_data.name || eb.project_data.title" class="ml-1 text-xs">{{ eb.project_data.name || eb.project_data.title }}</span>
+                                            </template>
+                                            <span v-else class="text-xs">—</span>
+                                        </td>
+                                        <td class="px-5 py-3.5 text-sm text-foreground/80 max-w-[200px]">
+                                            <p class="truncate">{{ eb.description }}</p>
+                                            <p v-if="eb.notes" class="text-xs text-muted-foreground mt-0.5 truncate italic">{{ eb.notes }}</p>
+                                        </td>
+                                        <td class="whitespace-nowrap px-5 py-3.5">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                                                :class="{
+                                                    'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400': eb.status === 'active',
+                                                    'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400': eb.status === 'used',
+                                                    'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400': eb.status === 'expired',
+                                                    'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400': eb.status === 'cancelled',
+                                                    'bg-muted text-muted-foreground': !['active','used','expired','cancelled'].includes(eb.status),
+                                                }">
+                                                {{ eb.status }}
+                                            </span>
+                                        </td>
+                                        <td class="whitespace-nowrap px-5 py-3.5 text-right">
+                                            <div class="flex items-center justify-end gap-2">
+                                                <button @click.stop="viewActivityLog(eb)"
+                                                    class="inline-flex items-center gap-1 h-7 px-2 rounded text-[10px] font-bold uppercase tracking-wider bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50 transition-colors">
+                                                    <ScrollText class="w-3 h-3" /> Log
+                                                </button>
+                                                <UpdateEarnedBenefit
+                                                    :gratitudeNumber="gratitudeNumber"
+                                                    :benefit="eb"
+                                                    :availableBenefits="data.available_benefits"
+                                                    @saved="fetchDetails"
+                                                />
+                                                <DeleteEarnedBenefit
+                                                    :gratitudeNumber="gratitudeNumber"
+                                                    :benefit="eb"
+                                                    @saved="fetchDetails"
+                                                />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="!data.earned_benefits || data.earned_benefits.length === 0">
+                                        <td colspan="8" class="px-6 py-8 text-center text-sm text-muted-foreground">No earned benefits recorded yet.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </Card>
+
+                <!-- Activity Log Modal -->
+                <div v-if="isActivityLogOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+                    <div class="bg-card w-full max-w-2xl rounded-xl shadow-2xl border border-border overflow-hidden max-h-[80vh] flex flex-col">
+                        <div class="bg-muted/80 px-6 py-4 flex justify-between items-center shrink-0 border-b border-border">
+                            <h2 class="text-sm font-semibold tracking-wide flex items-center gap-2 text-foreground">
+                                <ScrollText class="w-4 h-4 text-muted-foreground" /> Activity Log — Benefit #{{ activityLogBenefitId }}
+                            </h2>
+                            <button @click="isActivityLogOpen = false" class="text-muted-foreground hover:text-foreground transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                            </button>
+                        </div>
+                        <div class="overflow-y-auto flex-1 p-4">
+                            <div v-if="activityLogLoading" class="text-center py-8 text-sm text-muted-foreground">Loading…</div>
+                            <div v-else-if="activityLog.length === 0" class="text-center py-8 text-sm text-muted-foreground">No activity recorded for this entry.</div>
+                            <div v-else class="space-y-3">
+                                <div v-for="entry in activityLog" :key="entry.id" class="rounded-lg border border-border bg-muted/10 px-4 py-3 text-sm">
+                                    <div class="flex items-center justify-between gap-3 mb-1.5">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                                            :class="{
+                                                'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400': entry.event === 'created',
+                                                'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400': entry.event === 'updated',
+                                                'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400': entry.event === 'deleted',
+                                                'bg-muted text-muted-foreground': !['created','updated','deleted'].includes(entry.event),
+                                            }">{{ entry.event }}</span>
+                                        <span class="text-xs text-muted-foreground">{{ entry.created_at }}</span>
+                                    </div>
+                                    <p class="text-xs text-foreground/80">{{ entry.description }}</p>
+                                    <div v-if="entry.properties?.attributes || entry.properties?.old" class="mt-2 space-y-1">
+                                        <div v-if="entry.properties.old && Object.keys(entry.properties.old).length" class="text-[10px] font-mono bg-red-50/50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded px-2 py-1.5 text-red-700 dark:text-red-400">
+                                            <span class="font-bold not-italic uppercase tracking-wider text-[9px]">Before: </span>{{ JSON.stringify(entry.properties.old) }}
+                                        </div>
+                                        <div v-if="entry.properties.attributes && Object.keys(entry.properties.attributes).length" class="text-[10px] font-mono bg-green-50/50 dark:bg-green-950/20 border border-green-200/50 dark:border-green-800/30 rounded px-2 py-1.5 text-green-700 dark:text-green-400">
+                                            <span class="font-bold not-italic uppercase tracking-wider text-[9px]">After: </span>{{ JSON.stringify(entry.properties.attributes) }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="shrink-0 px-6 py-3 border-t border-border flex justify-end">
+                            <button @click="isActivityLogOpen = false" class="h-8 px-5 rounded-md border border-border text-sm font-semibold hover:bg-muted transition-colors">Close</button>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Tier Points Card -->
                 <Card class="shadow-sm border-border overflow-hidden transition-all duration-300">
@@ -601,7 +829,7 @@ const formatNumber = (num: number) => {
                                             }">
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-foreground">
                                                 <span :class="{'line-through text-muted-foreground': item.isFullyCancelled}">
-                                                    {{ item.displayDate ? new Date(item.displayDate).toISOString().split('T')[0] : '' }}
+                                                    {{ formatDate(item.displayDate, '') }}
                                                 </span>
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4">
@@ -649,7 +877,7 @@ const formatNumber = (num: number) => {
                                                     <div class="min-w-0">
                                                         <p class="text-xs font-semibold text-destructive">{{ item.cancellationData?.description }}</p>
                                                         <p class="text-[10px] text-red-500/70 dark:text-red-400/60 mt-0.5">
-                                                            {{ item.cancellationData?.date ? new Date(item.cancellationData.date).toISOString().split('T')[0] : '' }}
+                                                            {{ formatDate(item.cancellationData?.date, '') }}
                                                             <span v-if="item.cancellationData?.points" class="ml-1 font-bold">· -{{ formatNumber(item.cancellationData.points) }} pts</span>
                                                         </p>
                                                     </div>
@@ -659,7 +887,7 @@ const formatNumber = (num: number) => {
                                                     <div class="min-w-0">
                                                         <p class="text-xs font-semibold text-destructive">{{ cancel.description }}</p>
                                                         <p class="text-[10px] text-red-500/70 dark:text-red-400/60 mt-0.5">
-                                                            {{ cancel.date ? new Date(cancel.date).toISOString().split('T')[0] : '' }}
+                                                            {{ formatDate(cancel.date, '') }}
                                                             <span class="ml-1 font-bold">· -{{ formatNumber(cancel.points) }} pts</span>
                                                         </p>
                                                     </div>
@@ -667,42 +895,44 @@ const formatNumber = (num: number) => {
                                             </td>
 
                                             
-                                            <td class="px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
-                                                <ViewEntryDetails :item="item" />
-                                               <!-- If it's pure earned without cancellation, show actions -->
-                                                <template v-if="item.rowType === 'earned'">
-                                                    <span v-if="item.isExpired" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-300/50">
-                                                        <Clock class="w-3 h-3" /> Expired
-                                                    </span>
-                                                    <UpdateEarnedPoints
-                                                        :gratitudeNumber="gratitudeNumber"
-                                                        :point="item"
-                                                        :expireDays="earnedExpireDays"
-                                                        @saved="fetchDetails"
-                                                    />
-                                                    <template v-if="!item.isExpired && pointRemaining(item) > 0">
-                                                        <CancelPointEntry
+                                            <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
+                                                <div class="flex items-center justify-end gap-2">
+                                                    <ViewEntryDetails :item="item" />
+                                                    <!-- If it's pure earned without cancellation, show actions -->
+                                                    <template v-if="item.rowType === 'earned'">
+                                                        <span v-if="item.isExpired" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-300/50">
+                                                            <Clock class="w-3 h-3" /> Expired
+                                                        </span>
+                                                        <UpdateEarnedPoints
                                                             :gratitudeNumber="gratitudeNumber"
                                                             :point="item"
-                                                            pointType="earned"
+                                                            :expireDays="earnedExpireDays"
                                                             @saved="fetchDetails"
                                                         />
-                                                        <DeletePointEntry
+                                                        <template v-if="!item.isExpired && pointRemaining(item) > 0">
+                                                            <CancelPointEntry
+                                                                :gratitudeNumber="gratitudeNumber"
+                                                                :point="item"
+                                                                pointType="earned"
+                                                                @saved="fetchDetails"
+                                                            />
+                                                            <DeletePointEntry
+                                                                :gratitudeNumber="gratitudeNumber"
+                                                                :point="item"
+                                                                pointType="earned"
+                                                                @saved="fetchDetails"
+                                                            />
+                                                        </template>
+                                                    </template>
+                                                    <!-- If it is purely a cancellation row or completed_cancel, lock actions -->
+                                                    <template v-else-if="item.rowType === 'cancel'">
+                                                        <DeleteCancellation
                                                             :gratitudeNumber="gratitudeNumber"
-                                                            :point="item"
-                                                            pointType="earned"
+                                                            :cancellation="item"
                                                             @saved="fetchDetails"
                                                         />
                                                     </template>
-                                                </template>
-                                                <!-- If it is purely a cancellation row or completed_cancel, lock actions -->
-                                                <template v-else-if="item.rowType === 'cancel'">
-                                                    <DeleteCancellation
-                                                        :gratitudeNumber="gratitudeNumber"
-                                                        :cancellation="item"
-                                                        @saved="fetchDetails"
-                                                    />
-                                                </template>
+                                                </div>
                                             </td>
                                         </tr>
                                         <!-- Nested Redemption History Row -->
@@ -776,7 +1006,7 @@ const formatNumber = (num: number) => {
                                             }">
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-foreground">
                                                 <span :class="{'line-through text-muted-foreground': point.isFullyCancelled}">
-                                                    {{ point.date ? new Date(point.date).toISOString().split('T')[0] : 'N/A' }}
+                                                    {{ formatDate(point.displayDate || effectiveDateValue(point)) }}
                                                 </span>
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm">
@@ -802,7 +1032,7 @@ const formatNumber = (num: number) => {
                                                     <div class="min-w-0">
                                                         <p class="text-xs font-semibold text-destructive">{{ point.cancellationData?.description }}</p>
                                                         <p class="text-[10px] text-red-500/70 dark:text-red-400/60 mt-0.5">
-                                                            {{ point.cancellationData?.date ? new Date(point.cancellationData.date).toISOString().split('T')[0] : '' }}
+                                                            {{ formatDate(point.cancellationData?.date, '') }}
                                                             <span v-if="point.cancellationData?.points" class="ml-1 font-bold">· -{{ formatNumber(point.cancellationData.points) }} pts</span>
                                                         </p>
                                                     </div>
@@ -812,7 +1042,7 @@ const formatNumber = (num: number) => {
                                                     <div class="min-w-0">
                                                         <p class="text-xs font-semibold text-destructive">{{ cancel.description }}</p>
                                                         <p class="text-[10px] text-red-500/70 dark:text-red-400/60 mt-0.5">
-                                                            {{ cancel.date ? new Date(cancel.date).toISOString().split('T')[0] : '' }}
+                                                            {{ formatDate(cancel.date, '') }}
                                                             <span class="ml-1 font-bold">· -{{ formatNumber(cancel.points) }} pts</span>
                                                         </p>
                                                     </div>
@@ -830,33 +1060,35 @@ const formatNumber = (num: number) => {
                                                 </template>
                                                 <span v-else class="text-muted-foreground text-xs">—</span>
                                             </td>
-                                            <td class=" px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
-                                                <ViewEntryDetails :item="point" />
-                                                <template v-if="point.rowType === 'bonus'">
-                                                    <span v-if="point.isExpired" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-300/50">
-                                                        <Clock class="w-3 h-3" /> Expired
-                                                    </span>
-                                                    <UpdateBonusPoints
-                                                        :gratitudeNumber="gratitudeNumber"
-                                                        :point="point"
-                                                        :expireDays="bonusExpireDays"
-                                                        @saved="fetchDetails"
-                                                    />
-                                                    <template v-if="!point.isExpired && pointRemaining(point) > 0">
-                                                        <CancelPointEntry
+                                            <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
+                                                <div class="flex items-center justify-end gap-2">
+                                                    <ViewEntryDetails :item="point" />
+                                                    <template v-if="point.rowType === 'bonus'">
+                                                        <span v-if="point.isExpired" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400 border border-orange-300/50">
+                                                            <Clock class="w-3 h-3" /> Expired
+                                                        </span>
+                                                        <UpdateBonusPoints
                                                             :gratitudeNumber="gratitudeNumber"
                                                             :point="point"
-                                                            pointType="bonus"
+                                                            :expireDays="bonusExpireDays"
                                                             @saved="fetchDetails"
                                                         />
-                                                        <DeletePointEntry
-                                                            :gratitudeNumber="gratitudeNumber"
-                                                            :point="point"
-                                                            pointType="bonus"
-                                                            @saved="fetchDetails"
-                                                        />
+                                                        <template v-if="!point.isExpired && pointRemaining(point) > 0">
+                                                            <CancelPointEntry
+                                                                :gratitudeNumber="gratitudeNumber"
+                                                                :point="point"
+                                                                pointType="bonus"
+                                                                @saved="fetchDetails"
+                                                            />
+                                                            <DeletePointEntry
+                                                                :gratitudeNumber="gratitudeNumber"
+                                                                :point="point"
+                                                                pointType="bonus"
+                                                                @saved="fetchDetails"
+                                                            />
+                                                        </template>
                                                     </template>
-                                                </template>
+                                                </div>
                                             </td>
                                         </tr>
                                         <!-- Nested Redemption History Row -->
@@ -928,15 +1160,17 @@ const formatNumber = (num: number) => {
                                         <td class="whitespace-nowrap px-6 py-4 text-sm font-bold text-green-600 dark:text-green-400">
                                             ${{ redemption.amount > 0 ? Number(redemption.amount).toFixed(2) : (redemption.points / data.points_per_dollar).toFixed(2) }}
                                         </td>
-                                        <td class=" px-6 py-4 text-sm text-right space-x-2 flex items-center justify-end">
-                                            <ViewRedemptionDetails :redemption="redemption" :pointsPerDollar="data.points_per_dollar" />
-                                            <UpdateRedemption
-                                                :gratitudeNumber="gratitudeNumber"
-                                                :redemption="redemption"
-                                                :pointsPerDollar="data.points_per_dollar"
-                                                @saved="fetchDetails"
-                                            />
-                                            <DeleteRedemption :gratitudeNumber="gratitudeNumber" :redemptionId="redemption.id" @saved="fetchDetails" />
+                                        <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
+                                            <div class="flex items-center justify-end gap-2">
+                                                <ViewRedemptionDetails :redemption="redemption" :pointsPerDollar="data.points_per_dollar" />
+                                                <UpdateRedemption
+                                                    :gratitudeNumber="gratitudeNumber"
+                                                    :redemption="redemption"
+                                                    :pointsPerDollar="data.points_per_dollar"
+                                                    @saved="fetchDetails"
+                                                />
+                                                <DeleteRedemption :gratitudeNumber="gratitudeNumber" :redemptionId="redemption.id" @saved="fetchDetails" />
+                                            </div>
                                         </td>
                                     </tr>
                                     <tr v-if="!data.redemptions || data.redemptions.length === 0">

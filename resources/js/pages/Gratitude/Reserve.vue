@@ -21,7 +21,7 @@ const reserveColumns = [
     { key: 'date', label: 'Date', sortable: true },
     { key: 'description', label: 'Description', sortable: true },
     { key: 'status', label: 'Status', sortable: true, align: 'center' as const },
-    { key: 'actions', label: 'Actions', align: 'center' as const },
+    { key: 'actions', label: 'Actions', align: 'center' as const, exportable: false },
 ];
 
 const reserveList = ref<any[]>([]);

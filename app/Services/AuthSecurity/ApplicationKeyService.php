@@ -4,6 +4,7 @@ namespace App\Services\AuthSecurity;
 
 use App\Models\ApplicationKey;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 
 class ApplicationKeyService
 {
@@ -14,24 +15,26 @@ class ApplicationKeyService
 
     public function createKey(array $data): array
     {
-        $appKey = ApplicationKey::create([
-            'name' => $data['name'],
-            'url' => $data['url'] ?? null,
-            'status' => $data['status'] ?? 'active',
-        ]);
+        return DB::transaction(function () use ($data) {
+            $appKey = ApplicationKey::create([
+                'name' => $data['name'],
+                'url' => $data['url'] ?? null,
+                'status' => $data['status'] ?? 'active',
+            ]);
 
-        if (isset($data['roles'])) {
-            $appKey->syncRoles($data['roles']);
-        }
+            if (array_key_exists('roles', $data)) {
+                $appKey->syncRoles($data['roles'] ?? []);
+            }
 
-        $token = $appKey->createToken($data['name'] . ' API Key');
+            $token = $appKey->createToken($data['name'].' API Key');
 
-        $appKey->update(['token' => $token->plainTextToken]);
+            $appKey->update(['token' => $token->plainTextToken]);
 
-        return [
-            'application_key' => $appKey->load('roles'),
-            'plainTextToken' => $token->plainTextToken
-        ];
+            return [
+                'application_key' => $appKey->load('roles'),
+                'plainTextToken' => $token->plainTextToken,
+            ];
+        });
     }
 
     public function updateKey(ApplicationKey $appKey, array $data): ApplicationKey
@@ -42,8 +45,8 @@ class ApplicationKeyService
             'status' => $data['status'] ?? 'active',
         ]);
 
-        if (isset($data['roles'])) {
-            $appKey->syncRoles($data['roles']);
+        if (array_key_exists('roles', $data)) {
+            $appKey->syncRoles($data['roles'] ?? []);
         }
 
         return $appKey->load('roles');
@@ -55,13 +58,13 @@ class ApplicationKeyService
         $appKey->tokens()->delete();
 
         // Generate a new token
-        $token = $appKey->createToken($appKey->name . ' API Key');
+        $token = $appKey->createToken($appKey->name.' API Key');
 
         $appKey->update(['token' => $token->plainTextToken]);
 
         return [
             'application_key' => $appKey->load('roles'),
-            'plainTextToken' => $token->plainTextToken
+            'plainTextToken' => $token->plainTextToken,
         ];
     }
 

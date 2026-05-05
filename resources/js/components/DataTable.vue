@@ -52,10 +52,22 @@ const visibleColumns = computed(() =>
     props.columns.filter((col) => visibleColumnKeys.value[col.key] !== false),
 );
 
+const isActionColumn = (col: Column) => {
+    const key = col.key.toLowerCase();
+    const label = col.label.toLowerCase();
+
+    return (
+        col.exportable === false ||
+        key === 'actions' ||
+        key === 'action' ||
+        key.endsWith('_actions') ||
+        label === 'actions' ||
+        label === 'action'
+    );
+};
+
 const exportColumns = computed(() =>
-    visibleColumns.value.filter(
-        (col) => col.key !== 'actions' && col.exportable !== false,
-    ),
+    visibleColumns.value.filter((col) => !isActionColumn(col)),
 );
 
 const filteredRows = computed(() => {
@@ -166,15 +178,23 @@ const exportExcel = () => {
     downloadFile(buildCsv(), 'text/csv;charset=utf-8;', `${props.title ?? 'export'}.csv`);
 };
 
+const escapeHtml = (value: unknown) =>
+    String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
 const renderTableHtml = () => {
     const head = exportColumns.value
-        .map((col) => `<th style="text-align:${col.align ?? 'left'};padding:8px;border-bottom:1px solid #e5e7eb;">${col.label}</th>`)
+        .map((col) => `<th style="text-align:${col.align ?? 'left'};padding:8px;border-bottom:1px solid #e5e7eb;">${escapeHtml(col.label)}</th>`)
         .join('');
 
     const body = filteredRows.value
         .map((row) => {
             const cells = exportColumns.value
-                .map((col) => `<td style="padding:8px;text-align:${col.align ?? 'left'};border-bottom:1px solid #f4f4f5;">${row[col.key] ?? ''}</td>`)
+                .map((col) => `<td style="padding:8px;text-align:${col.align ?? 'left'};border-bottom:1px solid #f4f4f5;">${escapeHtml(row[col.key])}</td>`)
                 .join('');
             return `<tr>${cells}</tr>`;
         })

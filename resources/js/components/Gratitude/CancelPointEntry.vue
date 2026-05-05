@@ -42,6 +42,7 @@ const open = () => {
 };
 
 const pointLabel = computed(() => props.pointType === 'earned' ? 'Tier Point' : 'Bonus Point');
+const effectiveDate = computed(() => props.point.usable_date || props.point.useable_date || props.point.displayDate || props.point.date);
 
 const submit = async () => {
     isSubmitting.value = true;
@@ -68,6 +69,17 @@ const submit = async () => {
 };
 
 const formatNum = (n: any) => new Intl.NumberFormat('en-US').format(Number(n || 0));
+const formatDate = (date: any) => {
+    if (!date) return 'N/A';
+
+    const parsed = new Date(date);
+
+    if (Number.isNaN(parsed.getTime())) {
+        return 'N/A';
+    }
+
+    return parsed.toISOString().split('T')[0];
+};
 </script>
 
 <template>
@@ -100,8 +112,8 @@ const formatNum = (n: any) => new Intl.NumberFormat('en-US').format(Number(n || 
                     <!-- Point Summary -->
                     <div class="grid grid-cols-2 gap-3">
                         <div class="bg-muted/40 rounded-lg p-3 border border-border/50">
-                            <p class="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Date</p>
-                            <p class="text-sm font-semibold mt-0.5">{{ point.date ? new Date(point.date).toISOString().split('T')[0] : 'N/A' }}</p>
+                            <p class="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Effective Date</p>
+                            <p class="text-sm font-semibold mt-0.5">{{ formatDate(effectiveDate) }}</p>
                         </div>
                         <div class="bg-amber-50/70 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-200/50 dark:border-amber-800/50">
                             <p class="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider">Points</p>

@@ -20,6 +20,12 @@ defineProps<{
 }>();
 
 const { isCurrentUrl } = useCurrentUrl();
+
+const isItemActive = (item: NavItem) =>
+    isCurrentUrl(item.href) ||
+    item.isActive ||
+    item.children?.some((child) => isCurrentUrl(child.href)) ||
+    false;
 </script>
 
 <template>
@@ -44,12 +50,15 @@ const { isCurrentUrl } = useCurrentUrl();
                 <Collapsible
                     v-else
                     as-child
-                    :default-open="item.isActive"
+                    :default-open="isItemActive(item)"
                     class="group/collapsible"
                 >
                     <SidebarMenuItem>
                         <CollapsibleTrigger as-child>
-                            <SidebarMenuButton :tooltip="item.title">
+                            <SidebarMenuButton
+                                :is-active="isItemActive(item)"
+                                :tooltip="item.title"
+                            >
                                 <component :is="item.icon" v-if="item.icon" />
                                 <span>{{ item.title }}</span>
                                 <ChevronRight class="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />

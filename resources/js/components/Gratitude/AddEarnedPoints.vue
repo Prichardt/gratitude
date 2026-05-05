@@ -75,9 +75,9 @@ const submit = async () => {
                         </select>
                     </div>
 
-                    <!-- Date -->
+                    <!-- Effective Date -->
                     <div class="space-y-1.5">
-                        <Label class="text-xs font-semibold text-foreground/80">Date</Label>
+                        <Label class="text-xs font-semibold text-foreground/80">Effective Date</Label>
                         <Input type="date" v-model="form.date" required class="h-10" />
                     </div>
 

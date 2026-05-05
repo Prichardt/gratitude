@@ -10,6 +10,8 @@ class ApplicationKey extends Authenticatable
 {
     use HasApiTokens, HasRoles;
 
+    protected $guard_name = 'web';
+
     protected $fillable = [
         'name',
         'url',
