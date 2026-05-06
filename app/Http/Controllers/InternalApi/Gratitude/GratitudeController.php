@@ -47,6 +47,8 @@ class GratitudeController extends Controller
 
     public function import()
     {
+        $this->prepareLongRunningImport();
+
         $getResponse = $this->aivteamHttp()->get('https://aivteam.com/api/gratitude/get/gratitude-data-all');
         $getJourneysData = $this->aivteamHttp()->get('https://aivteam.com/api/get/all/journeys');
 
@@ -73,19 +75,33 @@ class GratitudeController extends Controller
 
         try {
             $this->gratitudeService->import($data, $journeysMap);
-            $syncedAccounts = $this->gratitudeService->syncAllAccountBalances();
 
             DB::commit();
-
-            return response()->json([
-                'message' => 'Data imported successfully',
-                'synced_accounts' => $syncedAccounts,
-            ]);
         } catch (\Exception $e) {
             DB::rollBack();
 
             return response()->json(['message' => 'Import failed: '.$e->getMessage()], 500);
         }
+
+        try {
+            $syncedAccounts = $this->gratitudeService->syncAllAccountBalances();
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Data imported, but balance sync failed: '.$e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Data imported successfully',
+            'synced_accounts' => $syncedAccounts,
+        ]);
+    }
+
+    private function prepareLongRunningImport(): void
+    {
+        @ini_set('max_execution_time', '0');
+        @set_time_limit(0);
+        DB::disableQueryLog();
     }
 
     public function apiIndex()
