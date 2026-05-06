@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 const props = defineProps({
     gratitudeNumber: { type: String, required: true },
     expireDays: { type: Number, default: 730 },
+    journeys: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(['saved']);
@@ -15,6 +16,7 @@ const isOpen = ref(false);
 const isSubmitting = ref(false);
 
 const form = ref({
+    earning_type: 'journey',
     journey_id: '',
     category: 'Guest',
     date: new Date().toISOString().split('T')[0],
@@ -23,14 +25,46 @@ const form = ref({
     description: 'Tier Points Earned on Journey'
 });
 
+const journeyOptions = computed(() => props.journeys as any[]);
+const selectedJourney = computed(() =>
+    journeyOptions.value.find((journey: any) => String(journey.journey_id || journey.id) === String(form.value.journey_id)),
+);
+const selectedJourneyEndDate = computed(() =>
+    selectedJourney.value?.endDate
+    || selectedJourney.value?.raw?.endDate
+    || selectedJourney.value?.raw?.end_date
+    || selectedJourney.value?.raw?.returnDate
+    || selectedJourney.value?.raw?.return_date
+    || '',
+);
+const isJourneyEntry = computed(() => form.value.earning_type === 'journey');
+const canSubmit = computed(() =>
+    !isJourneyEntry.value || (!!form.value.journey_id && !!selectedJourneyEndDate.value),
+);
+
 const submit = async () => {
+    if (!canSubmit.value) return;
+
     isSubmitting.value = true;
     try {
-        await axios.post(`/internal-api/gratitude/${props.gratitudeNumber}/earned`, form.value);
+        const payload: any = { ...form.value };
+
+        if (isJourneyEntry.value) {
+            payload.date = selectedJourneyEndDate.value;
+            payload.journey_end_date = selectedJourneyEndDate.value;
+            payload.project_data = selectedJourney.value?.raw || selectedJourney.value || null;
+        } else {
+            payload.journey_id = null;
+            payload.journey_end_date = null;
+            payload.project_data = null;
+        }
+
+        await axios.post(`/internal-api/gratitude/${props.gratitudeNumber}/earned`, payload);
         isOpen.value = false;
         // Reset form
         form.value.amount = '';
         form.value.points = 0;
+        form.value.journey_id = '';
         emit('saved');
     } catch (error) {
         console.error('Error adding points', error);
@@ -59,10 +93,29 @@ const submit = async () => {
 
                 <form @submit.prevent="submit" class="p-6 space-y-5">
                     
+                    <div class="space-y-1.5">
+                        <Label class="text-xs font-semibold text-foreground/80">Earned Through</Label>
+                        <select v-model="form.earning_type" class="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground" required>
+                            <option value="journey">Journey</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+
                     <!-- Journey -->
                     <div class="space-y-1.5">
-                        <Label class="text-xs font-semibold text-foreground/80">Journey ID</Label>
-                        <Input type="number" v-model="form.journey_id" required class="h-10" placeholder="Journey ID" />
+                        <Label class="text-xs font-semibold text-foreground/80">Journey</Label>
+                        <select
+                            v-if="isJourneyEntry"
+                            v-model="form.journey_id"
+                            class="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                            required
+                        >
+                            <option value="" disabled>Select a journey</option>
+                            <option v-for="journey in journeyOptions" :key="`${journey.guest_id || 'account'}-${journey.journey_id || journey.id}`" :value="journey.journey_id || journey.id">
+                                {{ journey.guest_name ? `${journey.guest_name} - ` : '' }}{{ journey.label || `Journey #${journey.journey_id || journey.id}` }}
+                            </option>
+                        </select>
+                        <Input v-else type="number" v-model="form.journey_id" class="h-10" placeholder="Optional Journey ID" />
                     </div>
 
                     <!-- Category -->
@@ -76,9 +129,15 @@ const submit = async () => {
                     </div>
 
                     <!-- Effective Date -->
-                    <div class="space-y-1.5">
+                    <div v-if="!isJourneyEntry" class="space-y-1.5">
                         <Label class="text-xs font-semibold text-foreground/80">Effective Date</Label>
                         <Input type="date" v-model="form.date" required class="h-10" />
+                    </div>
+                    <div v-else class="space-y-1.5">
+                        <Label class="text-xs font-semibold text-foreground/80">Effective Date</Label>
+                        <div class="flex h-10 items-center rounded-md border border-input bg-muted/30 px-3 text-sm text-muted-foreground">
+                            {{ selectedJourneyEndDate || 'Select a journey with an end date' }}
+                        </div>
                     </div>
 
                     <!-- Amount & Total Points -->
@@ -106,7 +165,7 @@ const submit = async () => {
                     <!-- Actions -->
                     <div class="flex justify-end space-x-3 pt-4 border-t border-border mt-6">
                         <Button type="button" variant="outline" class="h-9 px-6 font-semibold shadow-sm" @click="isOpen = false">CANCEL</Button>
-                        <Button type="submit" class="h-9 px-6 bg-[#0f2e4a] hover:bg-black text-white font-semibold tracking-wider shadow-sm" :disabled="isSubmitting">
+                        <Button type="submit" class="h-9 px-6 bg-[#0f2e4a] hover:bg-black text-white font-semibold tracking-wider shadow-sm" :disabled="isSubmitting || !canSubmit">
                             {{ isSubmitting ? 'SAVING...' : 'SUBMIT' }}
                         </Button>
                     </div>

@@ -26,6 +26,15 @@ watch(isOpen, (newVal) => {
         }
     }
 });
+
+const mediaUrl = (url?: string | null, path?: string | null) => {
+    if (url) return url;
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    if (path.startsWith('/storage/')) return path;
+    if (path.startsWith('storage/')) return `/${path}`;
+    return `/storage/${path}`;
+};
 </script>
 
 <template>
@@ -143,13 +152,9 @@ watch(isOpen, (newVal) => {
                             class="mb-2 block text-xs font-semibold text-muted-foreground uppercase"
                             >Level Image</span
                         >
-                        <div v-if="level.level_image" class="mt-1">
+                        <div v-if="mediaUrl(level.level_image_url, level.level_image)" class="mt-1">
                             <img
-                                :src="
-                                    level.level_image.startsWith('http')
-                                        ? level.level_image
-                                        : `/storage/${level.level_image}`
-                                "
+                                :src="mediaUrl(level.level_image_url, level.level_image)"
                                 alt="Level Image"
                                 class="h-20 w-auto rounded border border-border"
                             />
@@ -163,13 +168,9 @@ watch(isOpen, (newVal) => {
                             class="mb-2 block text-xs font-semibold text-muted-foreground uppercase"
                             >Level Icon</span
                         >
-                        <div v-if="level.level_icon" class="mt-1">
+                        <div v-if="mediaUrl(level.level_icon_url, level.level_icon)" class="mt-1">
                             <img
-                                :src="
-                                    level.level_icon.startsWith('http')
-                                        ? level.level_icon
-                                        : `/storage/${level.level_icon}`
-                                "
+                                :src="mediaUrl(level.level_icon_url, level.level_icon)"
                                 alt="Level Icon"
                                 class="h-10 w-10 rounded border border-border object-contain"
                             />

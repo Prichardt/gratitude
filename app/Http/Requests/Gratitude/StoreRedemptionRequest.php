@@ -19,6 +19,7 @@ class StoreRedemptionRequest extends FormRequest
             'reason' => 'nullable|string',
             'redemption_type' => 'nullable|string|in:journey,partner,other',
             'journey_id' => 'nullable|integer|required_if:redemption_type,journey',
+            'journey_data' => 'nullable|array',
         ];
     }
 }

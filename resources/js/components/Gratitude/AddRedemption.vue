@@ -11,7 +11,8 @@ const props = defineProps({
     usablePoints: { type: Number, default: 0 },
     pointsPerDollar: { type: Number, default: 35 },
     partnerPointsPerDollar: { type: Number, default: 35 },
-    level: { type: String, default: 'Explorer' }
+    level: { type: String, default: 'Explorer' },
+    journeys: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(['saved']);
@@ -31,6 +32,10 @@ const selectedRate = computed(() => {
         ? props.partnerPointsPerDollar
         : props.pointsPerDollar;
 });
+const journeyOptions = computed(() => props.journeys as any[]);
+const selectedJourney = computed(() =>
+    journeyOptions.value.find((journey: any) => String(journey.journey_id || journey.id) === String(form.value.journey_id)),
+);
 
 // Computed estimated value based on level rate
 const estimatedValue = computed(() => {
@@ -41,13 +46,19 @@ const estimatedValue = computed(() => {
 
 const maxRedeemable = computed(() => props.usablePoints);
 const isInsufficient = computed(() => Number(form.value.points) > maxRedeemable.value);
+const needsJourney = computed(() => form.value.redemption_type === 'journey');
+const canSubmit = computed(() =>
+    Number(form.value.points) > 0
+    && !isInsufficient.value
+    && (!needsJourney.value || !!form.value.journey_id),
+);
 
 const setMaxPoints = () => {
     form.value.points = maxRedeemable.value;
 };
 
 const submit = async () => {
-    if (form.value.points <= 0 || isInsufficient.value) return;
+    if (!canSubmit.value) return;
 
     isSubmitting.value = true;
     try {
@@ -57,6 +68,7 @@ const submit = async () => {
             reason: form.value.reason,
             redemption_type: form.value.redemption_type,
             journey_id: form.value.redemption_type === 'journey' ? form.value.journey_id : null,
+            journey_data: form.value.redemption_type === 'journey' ? (selectedJourney.value?.raw || selectedJourney.value || null) : null,
         });
         isOpen.value = false;
         form.value.redemption_type = 'partner';
@@ -115,8 +127,17 @@ const submit = async () => {
                     </div>
 
                     <div v-if="form.redemption_type === 'journey'" class="space-y-1.5">
-                        <Label class="text-xs font-semibold text-foreground/80">Journey ID</Label>
-                        <Input type="number" v-model="form.journey_id" required class="h-10" placeholder="Journey ID" />
+                        <Label class="text-xs font-semibold text-foreground/80">Journey</Label>
+                        <select
+                            v-model="form.journey_id"
+                            class="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            required
+                        >
+                            <option value="" disabled>Select a journey</option>
+                            <option v-for="journey in journeyOptions" :key="`${journey.guest_id || 'account'}-${journey.journey_id || journey.id}`" :value="journey.journey_id || journey.id">
+                                {{ journey.guest_name ? `${journey.guest_name} - ` : '' }}{{ journey.label || `Journey #${journey.journey_id || journey.id}` }}
+                            </option>
+                        </select>
                     </div>
 
                     <div class="space-y-1.5">
@@ -152,7 +173,7 @@ const submit = async () => {
 
                     <div class="flex justify-end space-x-3 pt-4 border-t border-border mt-6">
                         <Button type="button" variant="outline" class="h-9 px-6 font-semibold shadow-sm" @click="isOpen = false">CANCEL</Button>
-                        <Button type="submit" class="h-9 px-6 bg-amber-600 hover:bg-amber-700 text-white font-semibold tracking-wider shadow-sm" :disabled="isSubmitting || form.points <= 0 || isInsufficient">
+                        <Button type="submit" class="h-9 px-6 bg-amber-600 hover:bg-amber-700 text-white font-semibold tracking-wider shadow-sm" :disabled="isSubmitting || !canSubmit">
                             {{ isSubmitting ? 'PROCESSING...' : 'CONFIRM REDEMPTION' }}
                         </Button>
                     </div>

@@ -4,7 +4,6 @@ namespace App\Models\Gratitude;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
@@ -53,12 +52,30 @@ class GratitudeLevel extends Model
 
     public function getLevelImageUrlAttribute(): ?string
     {
-        return $this->level_image ? url(Storage::url($this->level_image)) : null;
+        return $this->storageUrl($this->level_image);
     }
 
     public function getLevelIconUrlAttribute(): ?string
     {
-        return $this->level_icon ? url(Storage::url($this->level_icon)) : null;
+        return $this->storageUrl($this->level_icon);
+    }
+
+    private function storageUrl(?string $path): ?string
+    {
+        if (! $path) {
+            return null;
+        }
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        $normalizedPath = preg_replace('#^/?storage/#', '', $path);
+        $encodedPath = collect(explode('/', ltrim($normalizedPath, '/')))
+            ->map(fn (string $segment) => rawurlencode($segment))
+            ->implode('/');
+
+        return '/internal-api/gratitude/level-media/'.$encodedPath;
     }
 
     public function benefits()

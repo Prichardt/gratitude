@@ -6,6 +6,7 @@ import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 import AddEarnedPoints from '@/components/Gratitude/AddEarnedPoints.vue';
 import AddBonusPoints from '@/components/Gratitude/AddBonusPoints.vue';
+import UpdateAccountStatus from '@/components/Gratitude/UpdateAccountStatus.vue';
 import UpdateEarnedPoints from '@/components/Gratitude/UpdateEarnedPoints.vue';
 import UpdateBonusPoints from '@/components/Gratitude/UpdateBonusPoints.vue';
 import CancelPointEntry from '@/components/Gratitude/CancelPointEntry.vue';
@@ -21,7 +22,7 @@ import UpdateEarnedBenefit from '@/components/Gratitude/UpdateEarnedBenefit.vue'
 import DeleteEarnedBenefit from '@/components/Gratitude/DeleteEarnedBenefit.vue';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, ChevronDown, Award, History, Gift, ShieldAlert, Zap, Clock, RefreshCw, TrendingUp, TrendingDown, Minus, Star, ScrollText } from 'lucide-vue-next';
+import { ArrowLeft, ChevronDown, Award, History, Gift, ShieldAlert, Zap, Clock, RefreshCw, TrendingUp, TrendingDown, Minus, Star, ScrollText, Printer, FileText } from 'lucide-vue-next';
 
 const props = defineProps({
     gratitudeNumber: {
@@ -40,6 +41,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 const data = ref<any>({
     gratitude: null,
     guests: [],
+    journeys: [],
+    levels: [],
     earned_points: [],
     bonus_points: [],
     cancellations: [],
@@ -286,6 +289,120 @@ const syncBalance = async () => {
 const formatNumber = (num: number) => {
     return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
 };
+
+const mediaUrl = (url?: string | null, path?: string | null) => {
+    if (url) return url;
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    if (path.startsWith('/storage/')) return path;
+    if (path.startsWith('storage/')) return `/${path}`;
+    return `/storage/${path}`;
+};
+
+const currentLevelIconUrl = computed(() =>
+    mediaUrl(data.value.level_info?.level_icon_url, data.value.level_info?.level_icon),
+);
+
+const escapeHtml = (value: any) =>
+    String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+const pointsHistorySource = (entry: any) => {
+    if (entry.source_type === 'LevelHistory') {
+        return `${entry.level_from || ''} to ${entry.level_to || ''}`;
+    }
+
+    return `${entry.source_type || ''}${entry.source_id ? ` #${entry.source_id}` : ''}`.trim();
+};
+
+const downgradeLevelDescription = (fromLevel?: string | null, toLevel?: string | null) =>
+    `You're back in ${toLevel || 'Explorer'} mode — your ${fromLevel || 'previous level'} badge is taking a short vacation until your next qualifying adventure`;
+
+const levelHistoryDescription = (entry: any) => {
+    const changeType = entry.change_type || entry.changeType;
+
+    if (changeType === 'downgrade') {
+        return downgradeLevelDescription(entry.level_from || entry.fromLevel, entry.level_to || entry.toLevel);
+    }
+
+    return entry.description || entry.reason || 'Level changed';
+};
+
+const pointsHistoryDescription = (entry: any) => {
+    if (entry.source_type === 'LevelHistory') {
+        return `${levelHistoryDescription(entry)} (${formatNumber(entry.earned_points_at_change || 0)} pts)`;
+    }
+
+    return entry.description || '';
+};
+
+const buildPointsHistoryPrintHtml = () => {
+    const rows = (data.value.points_history || [])
+        .map((entry: any) => `
+            <tr>
+                <td>${escapeHtml(formatDate(entry.date))}</td>
+                <td>${escapeHtml(entry.source_type === 'LevelHistory' ? `level ${entry.change_type}` : entry.type)}</td>
+                <td>${escapeHtml(pointsHistorySource(entry))}</td>
+                <td>${escapeHtml(pointsHistoryDescription(entry))}</td>
+                <td style="text-align:right;">${escapeHtml(entry.points >= 0 ? `+${formatNumber(entry.points)}` : formatNumber(entry.points))}</td>
+            </tr>
+        `)
+        .join('');
+
+    return `
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Source</th>
+                    <th>Description</th>
+                    <th style="text-align:right;">Points</th>
+                </tr>
+            </thead>
+            <tbody>${rows || '<tr><td colspan="5" style="text-align:center;">No point history recorded.</td></tr>'}</tbody>
+        </table>
+    `;
+};
+
+const openPointsHistoryPrintWindow = () => {
+    const printWindow = window.open('', '_blank', 'width=1200,height=800');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+        <html>
+            <head>
+                <title>Points History - ${escapeHtml(props.gratitudeNumber)}</title>
+                <style>
+                    @page { size: auto; margin: 16px; }
+                    body { margin: 16px; color: #0f172a; font-family: ui-sans-serif, system-ui, sans-serif; }
+                    h1 { font-size: 18px; margin: 0 0 4px; }
+                    p { margin: 0 0 14px; color: #475569; font-size: 12px; }
+                    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                    th { text-align: left; padding: 8px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; }
+                    td { padding: 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+                    tr { page-break-inside: avoid; }
+                </style>
+            </head>
+            <body>
+                <h1>Points History</h1>
+                <p>Gratitude ${escapeHtml(props.gratitudeNumber)}</p>
+                ${buildPointsHistoryPrintHtml()}
+            </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
+};
+
+const printPointsHistory = () => openPointsHistoryPrintWindow();
+const exportPointsHistoryPdf = () => openPointsHistoryPrintWindow();
 </script>
 
 <template>
@@ -343,18 +460,20 @@ const formatNumber = (num: number) => {
                                 <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin': syncing }" />
                                 {{ syncing ? 'Syncing...' : 'Sync Balance' }}
                             </Button>
-                            <Button class="bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all h-10 px-6 text-xs font-bold tracking-wider uppercase rounded-lg">
-                                Update Status
-                            </Button>
+                            <UpdateAccountStatus
+                                :gratitudeNumber="gratitudeNumber"
+                                :gratitude="data.gratitude"
+                                :levels="data.levels"
+                                @saved="fetchDetails"
+                            />
                             <Button variant="destructive" class="shadow-md transition-all h-10 px-6 text-xs font-bold tracking-wider uppercase rounded-lg">
                                 Delete
                             </Button>
                         </div>
                         <!-- Level only icon -->
                         <div class="pl-6 border-l border-border/50 flex items-center justify-center min-w-[100px]">
-                            <img v-if="data.level_info?.level_icon" :src="`/storage/${data.level_info.level_icon}`" class="w-20 h-20 xl:w-24 xl:h-24 object-contain drop-shadow-xl" :alt="data.gratitude.level" />
-                            <img v-else-if="data.level_info?.level_image" :src="`/storage/${data.level_info.level_image}`" class="w-20 h-20 xl:w-24 xl:h-24 object-contain drop-shadow-xl" :alt="data.gratitude.level" />
-                            <Award v-else class="w-20 h-20 xl:w-24 xl:h-24 text-amber-500 drop-shadow-xl" />
+                            <img v-if="currentLevelIconUrl" :src="currentLevelIconUrl" class="w-20 h-20 xl:w-24 xl:h-24 object-contain drop-shadow-xl" :alt="data.gratitude.level" />
+                            <span v-else class="max-w-32 text-center text-xl font-bold leading-tight text-foreground">{{ data.gratitude.level }}</span>
                         </div>
                     </div>
                 </div>
@@ -371,9 +490,8 @@ const formatNumber = (num: number) => {
                     <div class="flex items-center gap-4 flex-1 min-w-0">
                         <!-- Level icon / badge -->
                         <div class="shrink-0">
-                            <img v-if="data.level_info?.level_icon" :src="`/storage/${data.level_info.level_icon}`" class="w-10 h-10 object-contain drop-shadow" :alt="data.gratitude.level" />
-                            <img v-else-if="data.level_info?.level_image" :src="`/storage/${data.level_info.level_image}`" class="w-10 h-10 object-contain drop-shadow" :alt="data.gratitude.level" />
-                            <Award v-else class="w-10 h-10 text-amber-500" />
+                            <img v-if="currentLevelIconUrl" :src="currentLevelIconUrl" class="w-10 h-10 object-contain drop-shadow" :alt="data.gratitude.level" />
+                            <span v-else class="inline-flex min-h-10 items-center rounded-md bg-muted px-2 text-xs font-bold text-foreground">{{ data.gratitude.level }}</span>
                         </div>
                         <!-- Level name + window label -->
                         <div class="min-w-0">
@@ -439,7 +557,7 @@ const formatNumber = (num: number) => {
                                             {{ entry.changeType }}
                                         </span>
                                     </div>
-                                    <p class="text-xs text-muted-foreground mt-0.5">{{ entry.reason }}</p>
+                                    <p class="text-xs text-muted-foreground mt-0.5">{{ levelHistoryDescription(entry) }}</p>
                                 </div>
                                 <div class="text-right shrink-0">
                                     <p class="text-xs font-medium text-foreground">{{ formatDate(entry.date) }}</p>
@@ -554,7 +672,19 @@ const formatNumber = (num: number) => {
                                 <p class="text-xs text-muted-foreground mt-0.5">Earned, bonus, redeemed, cancelled, and expired events</p>
                             </div>
                         </div>
-                        <ChevronDown class="w-5 h-5 text-muted-foreground transition-transform duration-200" :class="{'rotate-180': isPointsHistoryOpen}" />
+                        <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2" @click.stop>
+                                <Button variant="outline" size="sm" class="h-8 px-3 text-xs" @click="exportPointsHistoryPdf">
+                                    <FileText class="w-3.5 h-3.5" />
+                                    PDF
+                                </Button>
+                                <Button variant="outline" size="sm" class="h-8 px-3 text-xs" @click="printPointsHistory">
+                                    <Printer class="w-3.5 h-3.5" />
+                                    Print
+                                </Button>
+                            </div>
+                            <ChevronDown class="w-5 h-5 text-muted-foreground transition-transform duration-200" :class="{'rotate-180': isPointsHistoryOpen}" />
+                        </div>
                     </div>
                     <div v-show="isPointsHistoryOpen" class="p-0 border-t border-border bg-card">
                         <div class="overflow-x-auto">
@@ -598,7 +728,7 @@ const formatNumber = (num: number) => {
                                                     {{ entry.level_to }}
                                                 </span>
                                             </td>
-                                            <td class="px-6 py-3 text-sm text-foreground/70 italic">{{ entry.description }}</td>
+                                            <td class="px-6 py-3 text-sm text-foreground/70 italic">{{ levelHistoryDescription(entry) }}</td>
                                             <td class="whitespace-nowrap px-6 py-3 text-sm font-semibold text-right text-muted-foreground">
                                                 {{ formatNumber(entry.earned_points_at_change) }} pts
                                             </td>
@@ -797,6 +927,7 @@ const formatNumber = (num: number) => {
                                 <AddEarnedPoints
                                     :gratitudeNumber="gratitudeNumber"
                                     :expireDays="earnedExpireDays"
+                                    :journeys="data.journeys"
                                     @saved="fetchDetails"
                                 />
                             </div>
@@ -975,6 +1106,8 @@ const formatNumber = (num: number) => {
                                 <AddBonusPoints
                                     :gratitudeNumber="gratitudeNumber"
                                     :expireDays="bonusExpireDays"
+                                    :guests="data.guests"
+                                    :journeys="data.journeys"
                                     @saved="fetchDetails"
                                 />
                             </div>
@@ -1134,6 +1267,7 @@ const formatNumber = (num: number) => {
                                     :pointsPerDollar="data.redemption_points_per_dollar || data.points_per_dollar"
                                     :partnerPointsPerDollar="data.partner_points_per_dollar || data.points_per_dollar"
                                     :level="data.gratitude?.level || 'Explorer'"
+                                    :journeys="data.journeys"
                                     @saved="fetchDetails"
                                 />
                             </div>

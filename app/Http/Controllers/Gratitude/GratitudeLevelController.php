@@ -16,6 +16,17 @@ class GratitudeLevelController extends Controller
         return response()->json($levels);
     }
 
+    public function media(string $path)
+    {
+        $path = ltrim(preg_replace('#^/?storage/#', '', $path), '/');
+
+        if ($path === '' || str_contains($path, '..') || ! Storage::disk('public')->exists($path)) {
+            abort(404);
+        }
+
+        return Storage::disk('public')->response($path);
+    }
+
     public function store(Request $request)
     {
         $request->validate([
@@ -27,8 +38,8 @@ class GratitudeLevelController extends Controller
             'earned_expire_days' => 'nullable|integer|min:1',
             'bonus_expire_days' => 'nullable|integer|min:1',
             'level_rules' => 'nullable|string', // JSON string from FormData
-            'level_image' => 'nullable|image|max:2048',
-            'level_icon' => 'nullable|image|max:2048',
+            'level_image' => 'nullable|file|mimes:jpg,jpeg,png,webp,gif,svg|max:4096',
+            'level_icon' => 'nullable|file|mimes:jpg,jpeg,png,webp,gif,svg|max:4096',
         ]);
 
         $data = $request->only('name', 'min_points', 'max_points', 'earned_expire_days', 'bonus_expire_days');
@@ -66,8 +77,8 @@ class GratitudeLevelController extends Controller
             'earned_expire_days' => 'nullable|integer|min:1',
             'bonus_expire_days' => 'nullable|integer|min:1',
             'level_rules' => 'nullable|string',
-            'level_image' => 'nullable|image|max:2048',
-            'level_icon' => 'nullable|image|max:2048',
+            'level_image' => 'nullable|file|mimes:jpg,jpeg,png,webp,gif,svg|max:4096',
+            'level_icon' => 'nullable|file|mimes:jpg,jpeg,png,webp,gif,svg|max:4096',
         ]);
 
         $data = $request->only('name', 'min_points', 'max_points', 'earned_expire_days', 'bonus_expire_days');

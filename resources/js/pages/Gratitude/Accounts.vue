@@ -85,6 +85,10 @@ const getLevelBadge = (level: string) => {
     }
 };
 
+const levelIconUrl = (row: any) => {
+    return row.level_icon_url || '';
+};
+
 const formatNumber = (val: any) => {
     const n = Number(val || 0);
     return new Intl.NumberFormat('en-US').format(n);
@@ -142,9 +146,12 @@ const syncBalance = async (gratitudeNumber: string) => {
                     :busy="loading"
                 >
                     <template #cell-level="{ row }">
-                        <span :class="['px-2.5 py-1 text-xs font-semibold rounded-full', getLevelBadge(String(row.level || ''))]">
-                            {{ row.level || '—' }}
-                        </span>
+                        <div class="flex items-center gap-2">
+                            <img v-if="levelIconUrl(row)" :src="levelIconUrl(row)" :alt="String(row.level || 'Level')" class="h-7 w-7 object-contain" />
+                            <span v-else :class="['px-2.5 py-1 text-xs font-semibold rounded-full', getLevelBadge(String(row.level || ''))]">
+                                {{ row.level || '—' }}
+                            </span>
+                        </div>
                     </template>
                     <template #cell-totalPoints="{ row }">
                         {{ formatNumber(row.totalPoints) }}

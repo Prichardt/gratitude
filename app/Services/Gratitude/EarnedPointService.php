@@ -13,7 +13,8 @@ class EarnedPointService
 
     public function add(Gratitude $gratitude, array $data): EarnedPoint
     {
-        $usableDate = Carbon::parse($data['date']);
+        $earningType = $this->earningType($data);
+        $usableDate = $this->effectiveDate($data, $earningType);
         $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
 
         $point = EarnedPoint::create([
@@ -24,11 +25,12 @@ class EarnedPointService
             'points' => $data['points'],
             'amount' => $data['amount'],
             'description' => $data['description'],
-            'journey_id' => $data['journey_id'],
+            'journey_id' => $data['journey_id'] ?? null,
             'points_breakdown' => $this->pointsBreakdown($data, $usableDate),
-            'status' => 'active',
+            'status' => $usableDate->isFuture() ? 'pending' : 'active',
             'usable_date' => $usableDate,
             'expires_at' => $this->pointExpiryService->calculateEarnedExpiry($usableDate, $level),
+            'project_data' => $earningType === 'journey' ? ($data['project_data'] ?? null) : null,
         ]);
 
         GratitudeService::syncAccountBalance($gratitude->gratitudeNumber);
@@ -38,7 +40,8 @@ class EarnedPointService
 
     public function update(EarnedPoint $point, Gratitude $gratitude, array $data): EarnedPoint
     {
-        $usableDate = Carbon::parse($data['date']);
+        $earningType = $this->earningType($data);
+        $usableDate = $this->effectiveDate($data, $earningType);
         $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
 
         // Determine expiry: if manually provided → use it.
@@ -61,12 +64,13 @@ class EarnedPointService
             'points' => $data['points'],
             'amount' => $data['amount'],
             'description' => $data['description'],
-            'journey_id' => $data['journey_id'],
+            'journey_id' => $data['journey_id'] ?? null,
             'points_breakdown' => $this->pointsBreakdown($data, $usableDate),
             'usable_date' => $usableDate,
             'expires_at' => $expiresAt,
             'expires_at_manual' => $isManual,
             'status' => $point->status === 'pending' && $usableDate->isFuture() ? 'pending' : 'active',
+            'project_data' => $earningType === 'journey' ? ($data['project_data'] ?? $point->project_data) : null,
         ]);
 
         GratitudeService::syncAccountBalance($gratitude->gratitudeNumber);
@@ -91,14 +95,46 @@ class EarnedPointService
     {
         $amount = (float) ($data['amount'] ?? 0);
         $points = (int) ($data['points'] ?? 0);
+        $earningType = $this->earningType($data);
 
         return [
             'points' => $points,
             'amount' => $amount,
             'points_per_dollar' => $amount > 0 ? round($points / $amount, 4) : null,
-            'journey_id' => $data['journey_id'],
+            'journey_id' => $data['journey_id'] ?? null,
             'entry_date' => $date->toDateString(),
-            'earning_type' => 'journey',
+            'earning_type' => $earningType,
+            'journey_end_date' => $data['journey_end_date'] ?? null,
+            'project_data' => $data['project_data'] ?? null,
         ];
+    }
+
+    private function earningType(array $data): string
+    {
+        return $data['earning_type'] ?? (! empty($data['journey_id']) ? 'journey' : 'other');
+    }
+
+    private function effectiveDate(array $data, string $earningType): Carbon
+    {
+        $date = $earningType === 'journey'
+            ? ($data['journey_end_date'] ?? $this->projectEndDate($data['project_data'] ?? null) ?? $data['date'] ?? null)
+            : ($data['date'] ?? null);
+
+        return Carbon::parse($date);
+    }
+
+    private function projectEndDate(mixed $projectData): mixed
+    {
+        if (! is_array($projectData)) {
+            return null;
+        }
+
+        foreach (['endDate', 'end_date', 'returnDate', 'return_date', 'date_end'] as $key) {
+            if (! empty($projectData[$key])) {
+                return $projectData[$key];
+            }
+        }
+
+        return null;
     }
 }

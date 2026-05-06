@@ -41,6 +41,18 @@ const fetchLevels = async () => {
 onMounted(() => {
     fetchLevels();
 });
+
+const levelMediaUrl = (level: any, type: 'icon' | 'image') => {
+    const url = type === 'icon' ? level.level_icon_url : level.level_image_url;
+    const path = type === 'icon' ? level.level_icon : level.level_image;
+
+    if (url) return url;
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    if (path.startsWith('/storage/')) return path;
+    if (path.startsWith('storage/')) return `/${path}`;
+    return `/storage/${path}`;
+};
 </script>
 
 <template>
@@ -63,6 +75,7 @@ onMounted(() => {
                     <thead class="bg-muted/50">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Media</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Min Points</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Max Points</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Journey Pts / $</th>
@@ -76,6 +89,13 @@ onMounted(() => {
                     <tbody class="divide-y divide-border bg-card">
                         <tr v-for="level in levels" :key="level.id">
                             <td class="whitespace-nowrap px-6 py-4 font-medium text-foreground">{{ level.name }}</td>
+                            <td class="whitespace-nowrap px-6 py-4">
+                                <div class="flex items-center gap-2">
+                                    <img v-if="levelMediaUrl(level, 'icon')" :src="levelMediaUrl(level, 'icon')" :alt="`${level.name} icon`" class="h-8 w-8 rounded border border-border object-contain bg-background" />
+                                    <img v-if="levelMediaUrl(level, 'image')" :src="levelMediaUrl(level, 'image')" :alt="`${level.name} image`" class="h-8 w-12 rounded border border-border object-cover bg-background" />
+                                    <span v-if="!levelMediaUrl(level, 'icon') && !levelMediaUrl(level, 'image')" class="text-xs text-muted-foreground">—</span>
+                                </div>
+                            </td>
                             <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">{{ level.min_points }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">{{ level.max_points || '∞' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-muted-foreground">{{ level.redemption_points_per_dollar || 35 }}</td>
@@ -97,7 +117,7 @@ onMounted(() => {
                             </td>
                         </tr>
                         <tr v-if="levels.length === 0">
-                            <td colspan="9" class="px-6 py-4 text-center text-muted-foreground">No levels established yet.</td>
+                            <td colspan="10" class="px-6 py-4 text-center text-muted-foreground">No levels established yet.</td>
                         </tr>
                     </tbody>
                 </table>

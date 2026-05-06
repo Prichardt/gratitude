@@ -270,6 +270,24 @@ class GratitudeService
         return Gratitude::all();
     }
 
+    public function syncAllAccountBalances(): int
+    {
+        $synced = 0;
+
+        Gratitude::query()
+            ->whereNotNull('gratitudeNumber')
+            ->select('id', 'gratitudeNumber')
+            ->orderBy('id')
+            ->chunkById(100, function ($gratitudes) use (&$synced) {
+                foreach ($gratitudes as $gratitude) {
+                    self::syncAccountBalance($gratitude->gratitudeNumber);
+                    $synced++;
+                }
+            });
+
+        return $synced;
+    }
+
     private function defaultLevelName(): string
     {
         return GratitudeLevel::where('status', true)
@@ -643,7 +661,7 @@ class GratitudeService
     {
         return match ($changeType) {
             'upgrade' => "Upgraded from {$oldLevel} to {$newLevel} from effective earned points",
-            'downgrade' => "Downgraded from {$oldLevel} to {$newLevel} from effective earned points",
+            'downgrade' => "You're back in {$newLevel} mode — your {$oldLevel} badge is taking a short vacation until your next qualifying adventure",
             default => "Level {$newLevel} maintained from effective earned points",
         };
     }
@@ -698,6 +716,7 @@ class GratitudeService
                         'level_at_redemption' => $getGratitude->level,
                         'points_per_dollar' => $pointsPerDollar,
                         'calculated_amount' => $monetaryValue,
+                        'journey_data' => $data['journey_data'] ?? null,
                     ],
                     'status' => 'approved',
                 ]);

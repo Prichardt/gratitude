@@ -343,7 +343,7 @@ class TierService
     {
         return match ($changeType) {
             'upgrade' => "Upgraded from {$fromLevel} to {$toLevel} — points threshold met, 2-year window restarted",
-            'downgrade' => "Downgraded from {$fromLevel} to {$toLevel} — 2-year window expired with insufficient qualifying activity",
+            'downgrade' => "You're back in {$toLevel} mode — your {$fromLevel} badge is taking a short vacation until your next qualifying adventure",
             'maintained' => "Level {$fromLevel} maintained — 2-year window renewed",
             default => "Level set to {$toLevel}",
         };

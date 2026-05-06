@@ -21,6 +21,7 @@ use App\Services\Gratitude\BonusPointService;
 use App\Services\Gratitude\CancellationService;
 use App\Services\Gratitude\EarnedPointService;
 use App\Services\Gratitude\GratitudeService;
+use App\Services\Gratitude\TierService;
 use Carbon\Carbon;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Request;
@@ -34,6 +35,7 @@ class GratitudeController extends Controller
         protected EarnedPointService $earnedPointService,
         protected BonusPointService $bonusPointService,
         protected CancellationService $cancellationService,
+        protected TierService $tierService,
     ) {}
 
     private function aivteamHttp(): PendingRequest
@@ -71,10 +73,14 @@ class GratitudeController extends Controller
 
         try {
             $this->gratitudeService->import($data, $journeysMap);
+            $syncedAccounts = $this->gratitudeService->syncAllAccountBalances();
 
             DB::commit();
 
-            return response()->json(['message' => 'Data imported successfully']);
+            return response()->json([
+                'message' => 'Data imported successfully',
+                'synced_accounts' => $syncedAccounts,
+            ]);
         } catch (\Exception $e) {
             DB::rollBack();
 
@@ -88,7 +94,7 @@ class GratitudeController extends Controller
             'id', 'gratitudeNumber', 'level', 'level_obtained_at',
             'totalPoints', 'useablePoints', 'totalExpiredPoints',
             'totalRemainingPoints', 'totalRedeemedPoints', 'totalCancelledPoints',
-            'status', 'is_active', 'last_activity_at', 'created_at', 'updated_at'
+            'status', 'is_active', 'systemLevelUpdate', 'last_activity_at', 'created_at', 'updated_at'
         )
             ->selectSub(
                 EarnedPoint::selectRaw('COALESCE(SUM(points), 0)')
@@ -98,6 +104,18 @@ class GratitudeController extends Controller
             )
             ->orderBy('updated_at', 'desc')
             ->get();
+
+        $levels = GratitudeLevel::whereIn('name', $gratitudes->pluck('level')->filter()->unique())
+            ->get()
+            ->keyBy('name');
+
+        $gratitudes->transform(function (Gratitude $gratitude) use ($levels) {
+            $level = $levels->get($gratitude->level);
+            $gratitude->setAttribute('level_icon_url', $level?->level_icon_url);
+            $gratitude->setAttribute('level_image_url', $level?->level_image_url);
+
+            return $gratitude;
+        });
 
         return response()->json([
             'points' => $gratitudes,
@@ -163,7 +181,7 @@ class GratitudeController extends Controller
         $guestsResponse = $this->aivteamHttp()->get(
             config('services.aivteam.base_url').'/api/gratitude/get/gratitude-by-number/'.$gratitudeNumber
         );
-        $guests = $guestsResponse->successful() ? $guestsResponse->json() : [];
+        $guests = $guestsResponse->successful() ? $this->normalizeGuests($guestsResponse->json()) : [];
 
         $level = GratitudeLevel::where('name', $gratitude->level)->first();
         $benefits = [];
@@ -193,6 +211,7 @@ class GratitudeController extends Controller
         $bonusPoints = BonusPoint::with(['cancellation', 'redemptions.redeemPoint'])->where('gratitudeNumber', $gratitudeNumber)->get();
         $cancellations = Cancellation::where('gratitudeNumber', $gratitudeNumber)->get();
         $redemptions = RedeemPoints::with('details')->where('gratitudeNumber', $gratitudeNumber)->get();
+        $journeys = $this->buildAccountJourneys($guests, $earnedPoints, $bonusPoints, $redemptions);
 
         $this->attachCancellationHistory($earnedPoints, $bonusPoints, $cancellations);
 
@@ -244,6 +263,8 @@ class GratitudeController extends Controller
         $data = [
             'gratitude' => $gratitude,
             'guests' => $guests,
+            'journeys' => $journeys,
+            'levels' => $allLevels->values(),
             'level_info' => $level,
             'earned_points' => $earnedPoints,
             'bonus_points' => $bonusPoints,
@@ -266,6 +287,47 @@ class GratitudeController extends Controller
         ];
 
         return response()->json($data);
+    }
+
+    public function apiUpdateStatus(Request $request, $gratitudeNumber)
+    {
+        $validated = $request->validate([
+            'status' => 'required|string|in:active,inactive',
+            'change_level' => 'nullable|boolean',
+            'level' => 'nullable|string|exists:gratitude_levels,name',
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
+
+        $updated = DB::transaction(function () use ($gratitude, $request, $validated) {
+            $status = $validated['status'];
+            $shouldChangeLevel = (bool) ($validated['change_level'] ?? false);
+            $newLevel = $validated['level'] ?? $gratitude->level;
+            $reason = $validated['reason'] ?? 'Manual status update';
+
+            if ($shouldChangeLevel && $newLevel && $newLevel !== $gratitude->level) {
+                $changedBy = $request->user()?->name
+                    ?? $request->user()?->email
+                    ?? 'admin';
+
+                $this->tierService->setLevelManually($gratitude, $newLevel, $changedBy, $reason);
+                $gratitude->refresh();
+            }
+
+            $gratitude->update([
+                'status' => $status,
+                'is_active' => $status === 'active',
+                'last_activity_at' => Carbon::now(),
+            ]);
+
+            return $gratitude->fresh();
+        });
+
+        return response()->json([
+            'message' => 'Gratitude status updated successfully.',
+            'gratitude' => $updated,
+        ]);
     }
 
     public function apiAddEarned(StoreEarnedPointRequest $request, $gratitudeNumber)
@@ -358,6 +420,7 @@ class GratitudeController extends Controller
             'reason' => 'nullable|string',
             'redemption_type' => 'nullable|string|in:journey,partner,other',
             'journey_id' => 'nullable|integer|required_if:redemption_type,journey',
+            'journey_data' => 'nullable|array',
         ]);
 
         $result = $this->gratitudeService->redeemPoints($gratitudeNumber, $request->all(), $request->points);
@@ -415,6 +478,185 @@ class GratitudeController extends Controller
             'useablePoints' => $gratitude->useablePoints,
             'totalPoints' => $gratitude->totalPoints,
         ]);
+    }
+
+    private function buildAccountJourneys(array $guests, $earnedPoints, $bonusPoints, $redemptions): array
+    {
+        $journeys = [];
+
+        $pushJourney = function (array $journey, ?array $guest, string $source) use (&$journeys) {
+            $journeyId = $this->firstFilled($journey, ['id', 'journey_id', 'journeyId', 'project_id', 'projectId']);
+
+            if (! $journeyId) {
+                return;
+            }
+
+            $guestId = $guest
+                ? $this->guestId($guest)
+                : $this->firstFilled($journey, ['guest_id', 'guestId', 'traveller_id', 'traveler_id', 'customer_id']);
+
+            $guestName = $guest ? $this->guestName($guest) : $this->firstFilled($journey, ['guest_name', 'guestName', 'traveller_name', 'traveler_name']);
+            $key = ($guestId ?: 'account').'#'.$journeyId;
+
+            $normalized = [
+                'id' => $journeyId,
+                'journey_id' => $journeyId,
+                'label' => $this->journeyLabel($journey, $journeyId),
+                'project_number' => $this->firstFilled($journey, ['projectNumber', 'project_number', 'number', 'code']),
+                'name' => $this->firstFilled($journey, ['name', 'title', 'project_name', 'projectName']),
+                'startDate' => $this->firstFilled($journey, ['startDate', 'start_date', 'departureDate', 'departure_date', 'date_start']),
+                'endDate' => $this->firstFilled($journey, ['endDate', 'end_date', 'returnDate', 'return_date', 'date_end']),
+                'guest_id' => $guestId,
+                'guest_name' => $guestName,
+                'source' => $source,
+                'raw' => $journey,
+            ];
+
+            $journeys[$key] = array_filter($normalized, fn ($value) => $value !== null && $value !== '');
+        };
+
+        foreach ($guests as $guest) {
+            if (! is_array($guest)) {
+                continue;
+            }
+
+            foreach ($this->extractJourneysFromGuest($guest) as $journey) {
+                $pushJourney($journey, $guest, 'guest');
+            }
+        }
+
+        foreach ($earnedPoints as $point) {
+            if (! $point->journey_id) {
+                continue;
+            }
+
+            $journey = is_array($point->project_data) ? $point->project_data : [];
+            $journey['id'] = $journey['id'] ?? $point->journey_id;
+            $pushJourney($journey, null, 'earned_point');
+        }
+
+        foreach ($bonusPoints as $point) {
+            if (! $point->journey_id) {
+                continue;
+            }
+
+            $breakdown = is_array($point->points_breakdown) ? $point->points_breakdown : [];
+            $journey = is_array($breakdown['journey_data'] ?? null) ? $breakdown['journey_data'] : [];
+            $journey['id'] = $journey['id'] ?? $point->journey_id;
+            $pushJourney($journey, null, 'bonus_point');
+        }
+
+        foreach ($redemptions as $redemption) {
+            if (! $redemption->journey_id) {
+                continue;
+            }
+
+            $breakdown = is_array($redemption->points_breakdown) ? $redemption->points_breakdown : [];
+            $journey = is_array($breakdown['journey_data'] ?? null) ? $breakdown['journey_data'] : [];
+            $journey['id'] = $journey['id'] ?? $redemption->journey_id;
+            $pushJourney($journey, null, 'redemption');
+        }
+
+        return collect($journeys)
+            ->sortBy(fn ($journey) => ($journey['guest_name'] ?? '').'|'.($journey['label'] ?? ''))
+            ->values()
+            ->all();
+    }
+
+    private function normalizeGuests(mixed $payload): array
+    {
+        if (! is_array($payload)) {
+            return [];
+        }
+
+        $items = array_is_list($payload)
+            ? $payload
+            : ($payload['guests'] ?? $payload['data'] ?? $payload['members'] ?? []);
+
+        return $this->asList($items);
+    }
+
+    private function extractJourneysFromGuest(array $guest): array
+    {
+        $journeys = [];
+
+        foreach (['journeys', 'projects', 'bookings', 'reservations', 'trips', 'travels', 'guest_journeys'] as $key) {
+            foreach ($this->asList($guest[$key] ?? null) as $journey) {
+                $journeys[] = $journey;
+            }
+        }
+
+        if (
+            $this->firstFilled($guest, ['journey_id', 'journeyId', 'project_id', 'projectId'])
+            && $this->firstFilled($guest, ['endDate', 'end_date', 'projectNumber', 'project_number', 'projectName', 'project_name'])
+        ) {
+            $journeys[] = $guest;
+        }
+
+        return $journeys;
+    }
+
+    private function asList(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        if (! array_is_list($value)) {
+            $values = array_values($value);
+            $items = $values && collect($values)->every(fn ($item) => is_array($item))
+                ? $values
+                : [$value];
+        } else {
+            $items = $value;
+        }
+
+        return array_values(array_filter($items, fn ($item) => is_array($item)));
+    }
+
+    private function firstFilled(array $data, array $keys): mixed
+    {
+        foreach ($keys as $key) {
+            if (isset($data[$key]) && $data[$key] !== '') {
+                return $data[$key];
+            }
+        }
+
+        return null;
+    }
+
+    private function guestId(array $guest): mixed
+    {
+        return $this->firstFilled($guest, ['guest_id', 'guestId', 'id', 'user_id', 'customer_id']);
+    }
+
+    private function guestName(array $guest): ?string
+    {
+        $name = trim(implode(' ', array_filter([
+            $guest['preferred_name'] ?? null,
+            $guest['first_name'] ?? null,
+            $guest['last_name'] ?? null,
+        ])));
+
+        return $name !== ''
+            ? $name
+            : $this->firstFilled($guest, ['name', 'full_name', 'guest_name']);
+    }
+
+    private function journeyLabel(array $journey, mixed $journeyId): string
+    {
+        $title = trim(implode(' - ', array_filter([
+            $this->firstFilled($journey, ['projectNumber', 'project_number', 'number', 'code']),
+            $this->firstFilled($journey, ['name', 'title', 'project_name', 'projectName']),
+        ])));
+
+        $date = $this->firstFilled($journey, ['endDate', 'end_date', 'returnDate', 'return_date', 'date_end']);
+
+        if ($title === '') {
+            $title = 'Journey #'.$journeyId;
+        }
+
+        return $date ? "{$title} ({$date})" : $title;
     }
 
     private function attachCancellationHistory($earnedPoints, $bonusPoints, $cancellations): void

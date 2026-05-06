@@ -16,6 +16,7 @@ Route::name('gratitude.')->prefix('gratitude/')
         Route::get('reserve', [GratitudeController::class, 'apiReserve'])->name('reserve');
         Route::get('history', [GratitudeController::class, 'apiHistory'])->name('history');
         Route::get('account/show/{gratitudeNumber}', [GratitudeController::class, 'apiShow'])->name('account.show');
+        Route::patch('account/{gratitudeNumber}/status', [GratitudeController::class, 'apiUpdateStatus'])->name('account.status');
         Route::post('{gratitudeNumber}/earned', [GratitudeController::class, 'apiAddEarned'])->name('earned');
         Route::put('{gratitudeNumber}/earned/{id}', [GratitudeController::class, 'apiUpdateEarned'])->name('earned.update');
         Route::delete('{gratitudeNumber}/earned/{id}', [GratitudeController::class, 'apiDeleteEarned'])->name('earned.destroy');
@@ -27,6 +28,9 @@ Route::name('gratitude.')->prefix('gratitude/')
         Route::post('{gratitudeNumber}/expire', [GratitudeController::class, 'apiExpirePoints'])->name('expire');
 
         // Levels CRUD
+        Route::get('level-media/{path}', [\App\Http\Controllers\Gratitude\GratitudeLevelController::class, 'media'])
+            ->where('path', '.*')
+            ->name('levels.media');
         Route::get('levels', [\App\Http\Controllers\Gratitude\GratitudeLevelController::class, 'index'])->name('levels.index');
         Route::post('levels', [\App\Http\Controllers\Gratitude\GratitudeLevelController::class, 'store'])->name('levels.store');
         Route::put('levels/{level}', [\App\Http\Controllers\Gratitude\GratitudeLevelController::class, 'update'])->name('levels.update');
