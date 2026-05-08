@@ -17,6 +17,7 @@ use App\Services\Gratitude\TierService;
 use Carbon\Carbon;
 use Database\Seeders\GratitudeLevelSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class GratitudeServiceTest extends TestCase
@@ -425,6 +426,131 @@ class GratitudeServiceTest extends TestCase
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->first();
         $this->assertEquals(1699, $gratitude->totalExpiredPoints);
         $this->assertEquals(0, $gratitude->totalRemainingPoints);
+    }
+
+    public function test_import_preserves_summary_balances_without_point_datasets()
+    {
+        $gratitudeNumber = 'G-IMPORT-SUMMARY';
+
+        $this->gratitudeService->import([
+            [
+                'id' => 992,
+                'gratitudeNumber' => $gratitudeNumber,
+                'totalPoints' => 5000,
+                'useablePoints' => 4200,
+                'level' => 'Globetrotter',
+                'status' => '1',
+                'statusChange' => '1',
+                'importStatus' => 1,
+            ],
+        ]);
+
+        $this->assertDatabaseHas('gratitudes', [
+            'old_id' => 992,
+            'gratitudeNumber' => $gratitudeNumber,
+            'totalPoints' => 5000,
+            'useablePoints' => 4200,
+            'level' => 'Globetrotter',
+        ]);
+    }
+
+    public function test_internal_import_fetches_detail_payloads_for_summary_gratitudes()
+    {
+        config([
+            'services.aivteam.base_url' => 'https://aivteam.test',
+            'services.aivteam.access_token' => 'test-token',
+        ]);
+
+        $summary = [
+            'id' => 66,
+            'old_id' => 66,
+            'gratitudeNumber' => 'G0005',
+            'totalPoints' => 287042,
+            'useablePoints' => 152192,
+            'level' => 'Jetsetter',
+            'status' => '1',
+            'statusChange' => '1',
+            'importStatus' => 1,
+            'created_at' => '2024-02-29T07:24:51.000000Z',
+            'updated_at' => '2026-04-28T07:51:18.000000Z',
+            'expires_at' => '2027-08-11T22:00:00.000000Z',
+        ];
+
+        Http::fake([
+            'https://aivteam.test/api/gratitude/get/gratitude-data-all/gratitude' => Http::response([$summary]),
+            'https://aivteam.test/api/get/all/journeys' => Http::response([
+                ['id' => 501, 'endDate' => '2026-01-10'],
+            ]),
+            'https://aivteam.test/api/gratitude/get/gratitude-data-all/gratitude/G0005' => Http::response([
+                'status' => true,
+                'data' => [
+                    'gratitude' => $summary,
+                    'cancellationPoints' => [],
+                    'earnedPoints' => [
+                        [
+                            'id' => 412,
+                            'old_id' => 457,
+                            'user_id' => null,
+                            'journey_id' => '501',
+                            'gratitudeNumber' => 'G0005',
+                            'points' => '1234',
+                            'redeemed_points' => 0,
+                            'amount' => '1234',
+                            'date' => '2026-01-01T00:00:00.000000Z',
+                            'description' => 'Tier Points Earned on Journey',
+                            'category' => null,
+                            'cancel_id' => null,
+                            'status' => '1',
+                            'created_at' => '2026-01-01T00:00:00.000000Z',
+                            'updated_at' => '2026-01-01T00:00:00.000000Z',
+                        ],
+                    ],
+                    'bonusPoints' => [
+                        [
+                            'id' => 5,
+                            'old_id' => 5,
+                            'journey_id' => null,
+                            'date' => '2026-01-02T00:00:00.000000Z',
+                            'user_id' => null,
+                            'category' => null,
+                            'type' => null,
+                            'gratitudeNumber' => 'G0005',
+                            'points' => '200',
+                            'redeemed_points' => 0,
+                            'amount' => null,
+                            'description' => 'Referral bonus',
+                            'cancel_id' => null,
+                            'status' => '1',
+                            'created_at' => '2026-01-02T00:00:00.000000Z',
+                            'updated_at' => '2026-01-02T00:00:00.000000Z',
+                        ],
+                    ],
+                    'redeemPoints' => [],
+                ],
+            ]),
+        ]);
+
+        $response = $this->actingAs($this->user)->getJson('/internal-api/gratitude/migrate-data');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('summary_accounts', 1)
+            ->assertJsonPath('detailed_accounts', 1)
+            ->assertJsonPath('detail_failures', 0);
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://aivteam.test/api/gratitude/get/gratitude-data-all/gratitude/G0005');
+
+        $this->assertDatabaseHas('earned_points', [
+            'old_id' => 412,
+            'gratitudeNumber' => 'G0005',
+            'points' => 1234,
+        ]);
+
+        $this->assertDatabaseHas('bonus_points', [
+            'old_id' => 5,
+            'gratitudeNumber' => 'G0005',
+            'points' => 200,
+        ]);
     }
 
     public function test_import_turns_legacy_negative_non_expiry_rows_into_cancellations()

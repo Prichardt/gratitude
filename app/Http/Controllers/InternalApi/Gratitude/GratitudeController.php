@@ -49,27 +49,33 @@ class GratitudeController extends Controller
     {
         $this->prepareLongRunningImport();
 
-        $getResponse = $this->aivteamHttp()->get('https://aivteam.com/api/gratitude/get/gratitude-data-all');
-        $getJourneysData = $this->aivteamHttp()->get('https://aivteam.com/api/get/all/journeys');
+        $baseUrl = rtrim((string) config('services.aivteam.base_url'));
+        $gratitudesUrl = $baseUrl.'/api/gratitude/get/gratitude-data-all/gratitude';
+
+        $getResponse = $this->aivteamHttp()->get($gratitudesUrl);
+        $getJourneysData = $this->aivteamHttp()->get($baseUrl.'/api/get/all/journeys');
 
         if (! $getResponse->successful()) {
-            return response()->json(['message' => 'Failed to fetch data from remote API Testing', 'status' => $getResponse->status()], 500);
+            return response()->json(['message' => 'Failed to fetch data from remote API All Gratitudes', 'status' => $getResponse->status()], 500);
         }
 
-        $data = $getResponse->json();
+        $summaryRecords = $this->normalizeRemoteList($getResponse->json(), ['data', 'gratitudes']);
 
-        if (empty($data) || ! is_array($data)) {
+        if (empty($summaryRecords)) {
             return response()->json(['message' => 'Invalid data format or empty payload'], 400);
         }
 
         $journeysMap = [];
         if ($getJourneysData->successful()) {
-            foreach ($getJourneysData->json() as $j) {
+            foreach ($this->normalizeRemoteList($getJourneysData->json(), ['data', 'journeys']) as $j) {
                 if (isset($j['id'])) {
                     $journeysMap[$j['id']] = $j;
                 }
             }
         }
+
+        [$detailedRecords, $detailFailures] = $this->fetchRemoteGratitudeAccountDetails($summaryRecords, $baseUrl);
+        $data = $this->mergeRemoteGratitudeRecords($summaryRecords, $detailedRecords);
 
         DB::beginTransaction();
 
@@ -84,7 +90,7 @@ class GratitudeController extends Controller
         }
 
         try {
-            $syncedAccounts = $this->gratitudeService->syncAllAccountBalances();
+            $syncedAccounts = $this->gratitudeService->syncAccountBalancesFor(array_keys($detailedRecords));
         } catch (\Throwable $e) {
             return response()->json([
                 'message' => 'Data imported, but balance sync failed: '.$e->getMessage(),
@@ -93,6 +99,10 @@ class GratitudeController extends Controller
 
         return response()->json([
             'message' => 'Data imported successfully',
+            'summary_accounts' => count($summaryRecords),
+            'detailed_accounts' => count($detailedRecords),
+            'detail_failures' => count($detailFailures),
+            'failed_detail_accounts' => $detailFailures,
             'synced_accounts' => $syncedAccounts,
         ]);
     }
@@ -102,6 +112,126 @@ class GratitudeController extends Controller
         @ini_set('max_execution_time', '0');
         @set_time_limit(0);
         DB::disableQueryLog();
+    }
+
+    private function fetchRemoteGratitudeAccountDetails(array $summaryRecords, string $baseUrl): array
+    {
+        $detailedRecords = [];
+        $failures = [];
+
+        foreach ($summaryRecords as $summaryRecord) {
+            $gratitudeNumber = $summaryRecord['gratitudeNumber'] ?? null;
+
+            if (! is_scalar($gratitudeNumber) || trim((string) $gratitudeNumber) === '') {
+                $failures[] = [
+                    'gratitudeNumber' => null,
+                    'message' => 'Missing gratitudeNumber in summary record',
+                ];
+
+                continue;
+            }
+
+            $gratitudeNumber = (string) $gratitudeNumber;
+
+            try {
+                $response = $this->aivteamHttp()->get(
+                    $baseUrl.'/api/gratitude/get/gratitude-data-all/gratitude/'.rawurlencode($gratitudeNumber)
+                );
+            } catch (\Throwable $e) {
+                $failures[] = [
+                    'gratitudeNumber' => $gratitudeNumber,
+                    'message' => $e->getMessage(),
+                ];
+
+                continue;
+            }
+
+            if (! $response->successful()) {
+                $failures[] = [
+                    'gratitudeNumber' => $gratitudeNumber,
+                    'status' => $response->status(),
+                    'message' => 'Failed to fetch detail payload',
+                ];
+
+                continue;
+            }
+
+            $detailRecord = $this->normalizeRemoteGratitudeDetail($response->json(), $summaryRecord);
+
+            if ($detailRecord === null) {
+                $failures[] = [
+                    'gratitudeNumber' => $gratitudeNumber,
+                    'message' => 'Invalid detail payload',
+                ];
+
+                continue;
+            }
+
+            $detailedRecords[$gratitudeNumber] = $detailRecord;
+        }
+
+        return [$detailedRecords, $failures];
+    }
+
+    private function normalizeRemoteGratitudeDetail(mixed $payload, array $summaryRecord): ?array
+    {
+        if (! is_array($payload)) {
+            return null;
+        }
+
+        if (($payload['status'] ?? true) === false) {
+            return null;
+        }
+
+        $data = is_array($payload['data'] ?? null) ? $payload['data'] : $payload;
+        $gratitude = is_array($data['gratitude'] ?? null) ? $data['gratitude'] : null;
+
+        if ($gratitude === null && isset($data['gratitudeNumber'])) {
+            $gratitude = $data;
+        }
+
+        if (! is_array($gratitude)) {
+            return null;
+        }
+
+        return array_merge($summaryRecord, $gratitude, [
+            'cancellationPoints' => $this->asList($data['cancellationPoints'] ?? []),
+            'earnedPoints' => $this->asList($data['earnedPoints'] ?? []),
+            'bonusPoints' => $this->asList($data['bonusPoints'] ?? []),
+            'redeemPoints' => $this->asList($data['redeemPoints'] ?? $data['redemptionPoints'] ?? []),
+        ]);
+    }
+
+    private function mergeRemoteGratitudeRecords(array $summaryRecords, array $detailedRecords): array
+    {
+        return array_map(function (array $summaryRecord) use ($detailedRecords) {
+            $gratitudeNumber = $summaryRecord['gratitudeNumber'] ?? null;
+
+            if (is_scalar($gratitudeNumber) && isset($detailedRecords[(string) $gratitudeNumber])) {
+                return $detailedRecords[(string) $gratitudeNumber];
+            }
+
+            return $summaryRecord;
+        }, $summaryRecords);
+    }
+
+    private function normalizeRemoteList(mixed $payload, array $keys = ['data']): array
+    {
+        if (! is_array($payload)) {
+            return [];
+        }
+
+        if (array_is_list($payload)) {
+            return $this->asList($payload);
+        }
+
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $payload)) {
+                return $this->asList($payload[$key]);
+            }
+        }
+
+        return [];
     }
 
     public function apiIndex()

@@ -76,6 +76,19 @@ const getStatusBadge = (status: string) => {
     }
 };
 
+const isActiveValue = (value: any) => value === true || value === 1 || value === '1' || String(value).toLowerCase() === 'true';
+const isActiveStatus = (value: any) => String(value || '').toLowerCase() === 'active' || isActiveValue(value);
+
+const isInactiveAccount = (row: any) => {
+    return !isActiveStatus(row.status) || !isActiveValue(row.is_active);
+};
+
+const accountRowClass = (row: Record<string, unknown>) => {
+    return isInactiveAccount(row)
+        ? 'bg-red-50/90 text-red-950 [&>td:first-child]:border-l-4 [&>td:first-child]:border-red-500'
+        : '';
+};
+
 const getLevelBadge = (level: string) => {
     switch(level?.toLowerCase()) {
         case 'jetsetter': return 'bg-amber-100 text-amber-800 border border-amber-300';
@@ -144,6 +157,7 @@ const syncBalance = async (gratitudeNumber: string) => {
                     :columns="columns"
                     :rows="gratitudePoints"
                     :busy="loading"
+                    :row-class="accountRowClass"
                 >
                     <template #cell-level="{ row }">
                         <div class="flex items-center gap-2">

@@ -37,7 +37,7 @@ return [
 
     'aivteam' => [
         'access_token' => env('AIVTEAM_ACCESS_TOKEN'),
-        'base_url' => env('AIVTEAM_BASE_URL', 'http://aivteam.local'),
+        'base_url' => env('AIVTEAM_BASE_URL', 'https://aivteam.com'),
     ],
 
     'anthropic' => [

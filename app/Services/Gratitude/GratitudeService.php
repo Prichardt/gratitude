@@ -89,6 +89,8 @@ class GratitudeService
     public function import(array $data, array $journeysMap = []): void
     {
         foreach ($data as $record) {
+            $hasPointData = $this->hasImportedPointDatasets($record);
+
             $gratitude = Gratitude::updateOrCreate(
                 ['old_id' => $record['id']],
                 [
@@ -257,7 +259,7 @@ class GratitudeService
                 }
             }
 
-            if ($gratitude->gratitudeNumber) {
+            if ($gratitude->gratitudeNumber && $hasPointData) {
                 self::syncAccountBalance($gratitude->gratitudeNumber);
                 $this->syncImportedCancellationBreakdown($gratitude->gratitudeNumber);
                 $this->rebuildImportedLevelHistory($gratitude->gratitudeNumber);
@@ -288,11 +290,51 @@ class GratitudeService
         return $synced;
     }
 
+    public function syncAccountBalancesFor(array $gratitudeNumbers): int
+    {
+        $numbers = collect($gratitudeNumbers)
+            ->filter(fn ($gratitudeNumber) => is_scalar($gratitudeNumber) && trim((string) $gratitudeNumber) !== '')
+            ->map(fn ($gratitudeNumber) => (string) $gratitudeNumber)
+            ->unique()
+            ->values();
+
+        if ($numbers->isEmpty()) {
+            return 0;
+        }
+
+        $synced = 0;
+
+        foreach ($numbers->chunk(100) as $chunk) {
+            Gratitude::query()
+                ->whereIn('gratitudeNumber', $chunk->all())
+                ->select('id', 'gratitudeNumber')
+                ->orderBy('id')
+                ->get()
+                ->each(function (Gratitude $gratitude) use (&$synced) {
+                    self::syncAccountBalance($gratitude->gratitudeNumber);
+                    $synced++;
+                });
+        }
+
+        return $synced;
+    }
+
     private function defaultLevelName(): string
     {
         return GratitudeLevel::where('status', true)
             ->orderBy('min_points')
             ->value('name') ?? 'Explorer';
+    }
+
+    private function hasImportedPointDatasets(array $record): bool
+    {
+        foreach (['cancellationPoints', 'earnedPoints', 'bonusPoints', 'redeemPoints'] as $key) {
+            if (array_key_exists($key, $record) && is_array($record[$key])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function parseFallbackDate(array $row): ?Carbon

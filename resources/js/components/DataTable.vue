@@ -5,6 +5,7 @@ import { FileDown, FileText, Printer, Search, RefreshCw } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue';
 
 type Align = 'left' | 'center' | 'right';
+type RowClass = string | string[] | Record<string, boolean> | undefined;
 
 interface Column {
     key: string;
@@ -23,6 +24,7 @@ const props = defineProps<{
     searchPlaceholder?: string;
     defaultPageSize?: number;
     pageSizeOptions?: number[];
+    rowClass?: (row: Record<string, unknown>) => RowClass;
 }>();
 
 const searchTerm = ref('');
@@ -147,6 +149,8 @@ const toggleSort = (key: string) => {
         sortDirection.value = 'asc';
     }
 };
+
+const getRowClass = (row: Record<string, unknown>) => props.rowClass?.(row) ?? '';
 
 const buildCsv = () => {
     const header = exportColumns.value.map((col) => `"${col.label}"`).join(',');
@@ -368,7 +372,11 @@ defineExpose({
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-border/70 bg-background">
-                    <tr v-for="row in paginatedRows" :key="String(row.id)">
+                    <tr
+                        v-for="row in paginatedRows"
+                        :key="String(row.id)"
+                        :class="getRowClass(row)"
+                    >
                         <td
                             v-for="column in visibleColumns"
                             :key="`${row.id}-${column.key}`"
