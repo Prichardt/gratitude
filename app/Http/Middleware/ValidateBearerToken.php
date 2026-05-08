@@ -2,9 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ApplicationKey;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\Response;
 
 class ValidateBearerToken
@@ -17,16 +18,15 @@ class ValidateBearerToken
             return response()->json(['message' => 'Unauthorized.'], 401);
         }
 
-        [$id, $secret] = explode('|', $bearer, 2);
+        $token = PersonalAccessToken::findToken($bearer);
 
-        $token = DB::connection('auth_db')
-            ->table('personal_access_tokens')
-            ->where('id', (int) $id)
-            ->first();
+        $tokenable = $token?->tokenable;
 
-        if (! $token || ! hash_equals($token->token, hash('sha256', $secret))) {
+        if (! $token || ! ($tokenable instanceof ApplicationKey) || $tokenable->status !== 'active') {
             return response()->json(['message' => 'Unauthorized.'], 401);
         }
+
+        $token->forceFill(['last_used_at' => now()])->save();
 
         return $next($request);
     }
