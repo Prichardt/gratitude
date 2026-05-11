@@ -1076,11 +1076,11 @@ class GratitudeService
         $level = GratitudeLevel::where('name', $gratitude->level)->first();
 
         $earnedPoints = EarnedPoint::where('gratitudeNumber', $gratitudeNumber)
-            ->with(['cancellation', 'redemptions'])
+            ->with(['cancellation', 'redemptions.redeemPoint'])
             ->get();
 
         $bonusPoints = BonusPoint::where('gratitudeNumber', $gratitudeNumber)
-            ->with(['cancellation', 'redemptions'])
+            ->with(['cancellation', 'redemptions.redeemPoint'])
             ->get();
 
         $cancellations = Cancellation::where('gratitudeNumber', $gratitudeNumber)->get();

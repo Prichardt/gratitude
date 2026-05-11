@@ -37,8 +37,18 @@ class GratitudeController extends Controller
     public function index()
     {
         $gratitudes = $this->gratitudeService->allGratitudes();
+        $levels = GratitudeLevel::whereIn('name', $gratitudes->pluck('level')->filter()->unique())
+            ->get()
+            ->keyBy('name');
 
-        return response()->json($gratitudes);
+        return response()->json(
+            $gratitudes
+                ->map(fn (Gratitude $gratitude) => $this->formatGratitudeForExternal(
+                    $gratitude,
+                    $levels->get($gratitude->level)
+                ))
+                ->values()
+        );
     }
 
     public function store(Request $request)
@@ -127,6 +137,21 @@ class GratitudeController extends Controller
     public function show(string $gratitudeNumber)
     {
         $data = $this->gratitudeService->gratitudeDataByNumber($gratitudeNumber);
+
+        if (! $data) {
+            return response()->json(['message' => 'Gratitude account not found'], 404);
+        }
+
+        $level = $data['level_info'] ?? null;
+        $data['gratitude'] = $this->formatGratitudeForExternal($data['gratitude'], $level);
+        $data['earned_benefits'] = $this->earnedBenefitsFor($gratitudeNumber);
+        $data['points_history'] = $this->buildPointsHistory(
+            $data['earned_points'],
+            $data['bonus_points'],
+            $data['cancellations'],
+            $data['redemptions']
+        );
+        $data['points_per_dollar'] = $this->redemptionPointsPerDollar($level);
 
         return response()->json($data);
     }
@@ -459,5 +484,38 @@ class GratitudeController extends Controller
             'source_type' => $sourceType,
             'source_id' => $sourceId,
         ];
+    }
+
+    private function earnedBenefitsFor(string $gratitudeNumber)
+    {
+        return GratitudeEarnedBenefit::where('gratitudeNumber', $gratitudeNumber)
+            ->with('benefit')
+            ->orderByDesc('date')
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    private function formatGratitudeForExternal(Gratitude $gratitude, ?GratitudeLevel $level = null): array
+    {
+        $pointsPerDollar = $this->redemptionPointsPerDollar($level);
+        $usablePoints = (int) $gratitude->useablePoints;
+        $data = $gratitude->toArray();
+
+        $data['usable_points'] = $usablePoints;
+        $data['points_per_dollar'] = $pointsPerDollar;
+        $data['redemption_points_per_dollar'] = $pointsPerDollar;
+        $data['usable_points_dollar_value'] = $this->dollarValueForPoints($usablePoints, $pointsPerDollar);
+
+        return $data;
+    }
+
+    private function redemptionPointsPerDollar(?GratitudeLevel $level): float
+    {
+        return max(1, (float) ($level?->redemption_points_per_dollar ?: 35));
+    }
+
+    private function dollarValueForPoints(int $points, float $pointsPerDollar): float
+    {
+        return round($points / $pointsPerDollar, 2);
     }
 }

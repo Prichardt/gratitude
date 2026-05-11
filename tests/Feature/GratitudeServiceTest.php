@@ -8,6 +8,7 @@ use App\Models\Gratitude\Cancellation;
 use App\Models\Gratitude\EarnedPoint;
 use App\Models\Gratitude\Gratitude;
 use App\Models\Gratitude\GratitudeBenefit;
+use App\Models\Gratitude\GratitudeEarnedBenefit;
 use App\Models\Gratitude\GratitudeLevel;
 use App\Models\User;
 use App\Services\Gratitude\CancellationService;
@@ -122,6 +123,25 @@ class GratitudeServiceTest extends TestCase
             ->assertJsonPath('balance.pending_points', 100);
     }
 
+    public function test_external_api_all_includes_usable_points_dollar_value()
+    {
+        $this->withoutMiddleware(ValidateBearerToken::class);
+
+        Gratitude::where('gratitudeNumber', $this->gratitudeNumber)->update([
+            'useablePoints' => 70,
+            'level' => 'Explorer',
+        ]);
+
+        $response = $this->getJson('/api/v1/gratitude/all');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('0.gratitudeNumber', $this->gratitudeNumber)
+            ->assertJsonPath('0.usable_points', 70)
+            ->assertJsonPath('0.points_per_dollar', 35)
+            ->assertJsonPath('0.usable_points_dollar_value', 2);
+    }
+
     public function test_external_api_can_check_level()
     {
         $this->withoutMiddleware(ValidateBearerToken::class);
@@ -196,6 +216,51 @@ class GratitudeServiceTest extends TestCase
             ->assertJsonPath('history.0.type', 'earned')
             ->assertJsonPath('history.0.points', 1200)
             ->assertJsonPath('history.1.type', 'bonus');
+    }
+
+    public function test_external_api_single_includes_points_history_and_earned_benefits()
+    {
+        $this->withoutMiddleware(ValidateBearerToken::class);
+
+        EarnedPoint::create([
+            'gratitudeNumber' => $this->gratitudeNumber,
+            'journey_id' => 1201,
+            'date' => Carbon::today(),
+            'usable_date' => Carbon::today(),
+            'points' => 900,
+            'status' => 'active',
+            'description' => 'Journey completed',
+        ]);
+
+        $benefit = GratitudeBenefit::create([
+            'name' => 'Late Checkout',
+            'benefit_key' => 'late_checkout',
+            'description' => 'Late checkout benefit',
+            'type' => 'journey',
+            'is_active' => true,
+        ]);
+
+        GratitudeEarnedBenefit::create([
+            'gratitudeNumber' => $this->gratitudeNumber,
+            'benefit_id' => $benefit->id,
+            'benefit_name' => 'Late Checkout',
+            'benefit_key' => 'late_checkout',
+            'description' => 'Late checkout granted',
+            'benefit_value' => '2 Hours',
+            'value_type' => 'item',
+            'date' => Carbon::today(),
+            'status' => 'used',
+        ]);
+
+        $response = $this->getJson("/api/v1/gratitude/{$this->gratitudeNumber}");
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('gratitude.gratitudeNumber', $this->gratitudeNumber)
+            ->assertJsonPath('points_history.0.type', 'earned')
+            ->assertJsonPath('points_history.0.points', 900)
+            ->assertJsonPath('earned_benefits.0.benefit_name', 'Late Checkout')
+            ->assertJsonPath('earned_benefits.0.benefit.benefit_key', 'late_checkout');
     }
 
     public function test_pending_points_are_activated_on_usable_date()
