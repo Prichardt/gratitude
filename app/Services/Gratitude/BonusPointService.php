@@ -18,7 +18,7 @@ class BonusPointService
         $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
 
         $point = BonusPoint::create([
-            'user_id' => $gratitude->user_id,
+            'user_id' => $data['user_id'],
             'gratitudeNumber' => $gratitude->gratitudeNumber,
             'date' => $effectiveDate,
             'category' => $data['category'] ?? $bonusType,

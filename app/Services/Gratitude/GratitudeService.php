@@ -21,16 +21,17 @@ class GratitudeService
     public function createAccount(array $data = []): Gratitude
     {
         return DB::transaction(function () use ($data) {
-            $levelObtainedAt = ! empty($data['level_obtained_at'])
-                ? Carbon::parse($data['level_obtained_at'])
-                : Carbon::now();
+            $levelObtainedAt = Carbon::now();
+            $levelName = $this->defaultLevelName();
+            $level = GratitudeLevel::where('name', $levelName)->first();
 
-            $level = $data['level'] ?? $this->defaultLevelName();
             $gratitudeNumber = $data['gratitudeNumber']
                 ?? $data['gratitude_number']
-                ?? $this->generateGratitudeNumber($data['_prefix'] ?? 'G'); 
+                ?? $this->generateGratitudeNumber($data['_prefix'] ?? 'G');
 
-            return Gratitude::create([              
+            $expireDays = max(1, (int) ($level?->earned_expire_days ?: PointExpiryService::DEFAULT_EXPIRE_DAYS));
+
+            return Gratitude::create([
                 'gratitudeNumber' => $gratitudeNumber,
                 'totalPoints' => 0,
                 'totalEarnedPoints' => 0,
@@ -41,24 +42,24 @@ class GratitudeService
                 'totalRemainingPoints' => 0,
                 'useablePoints' => 0,
                 'nonUseablePoints' => 0,
-                'level' => $level,
+                'level' => $levelName,
                 'levelHistory' => [
                     [
-                        'level' => $level,
+                        'level' => $levelName,
                         'startDate' => $levelObtainedAt->toDateString(),
                         'endDate' => null,
                         'changedBy' => 'external_api',
                     ],
                 ],
                 'level_obtained_at' => $levelObtainedAt,
-                'status' => $data['status'] ?? 'active',
-                'statusChange' => $data['statusChange'] ?? null,
-                'statusChangeReason' => $data['statusChangeReason'] ?? null,
-                'systemLevelUpdate' => $data['systemLevelUpdate'] ?? true,
-                'is_active' => $data['is_active'] ?? true,
-                'importStatus' => $data['importStatus'] ?? false,
-                'expires_at' => ! empty($data['expires_at']) ? Carbon::parse($data['expires_at']) : null,
-                'last_activity_at' => Carbon::now(),
+                'status' => 'active',
+                'statusChange' => null,
+                'statusChangeReason' => null,
+                'systemLevelUpdate' => false,
+                'is_active' => true,
+                'importStatus' => false,
+                'expires_at' => $levelObtainedAt->copy()->addDays($expireDays),
+                'last_activity_at' => $levelObtainedAt,
             ]);
         });
     }
@@ -68,8 +69,11 @@ class GratitudeService
         $prefix = strtoupper($prefix);
 
         $numbers = Gratitude::whereNotNull('gratitudeNumber')
+            ->where('gratitudeNumber', 'LIKE', "$prefix%")
             ->lockForUpdate()
             ->pluck('gratitudeNumber');
+
+        // dd($numbers);
 
         $highestNumber = $numbers->reduce(function (int $highest, ?string $gratitudeNumber) use ($prefix) {
             if (! $gratitudeNumber || ! preg_match('/^'.preg_quote($prefix, '/').'(\d+)$/', $gratitudeNumber, $matches)) {

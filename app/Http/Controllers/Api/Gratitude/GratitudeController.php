@@ -61,24 +61,35 @@ class GratitudeController extends Controller
             'last_name' => 'required|string|max:255',
             'email' => 'required|email|max:255',
             'client_id' => 'required|integer',
-            'gratitude_number' => 'nullable|string|max:255|unique:gratitudes,gratitudeNumber',
+            'gratitude_number' => 'nullable|string|max:255',
         ]);
-    
+
+        if (! empty($validated['gratitude_number'])) {
+            $existing = Gratitude::query()->where('gratitudeNumber', $validated['gratitude_number'])->first();
+
+            if ($existing) {
+                return response()->json([
+                    'message'         => 'Gratitude number already in use.',
+                    'gratitudeNumber' => $existing->gratitudeNumber,
+                    'client_id'       => $validated['client_id'],
+                ], 409);
+            }
+        }
 
         $prefixes   = ['1' => 'G', '2' => 'T', '3' => 'P'];
         $category   = $validated['category'] ?? null;
         $categoryId = is_array($category) ? ($category[0] ?? null) : $category;
         $prefix     = $prefixes[(string) $categoryId] ?? 'G';
 
-
         $gratitude = $this->gratitudeService->createAccount(
             array_merge($validated, ['_prefix' => $prefix])
         );
 
         return response()->json([
-            'message'  => 'Gratitude account created',
-            'gratitude' => $gratitude,
-            'prefix_used' => $prefix,
+            'message'         => 'Gratitude account created',
+            'gratitudeNumber' => $gratitude->gratitudeNumber,
+            'client_id'       => $validated['client_id'],
+            'gratitude'       => $gratitude,
         ], 201);
     }
 
@@ -206,11 +217,12 @@ class GratitudeController extends Controller
         ]);
     }
 
+
     // Earned Points
-    public function storeEarned(StoreEarnedPointRequest $request, string $gratitudeNumber)
+    public function storeEarned(Request $request, string $gratitude_number)
     {
-        $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
-        $point = $this->earnedPointService->add($gratitude, $request->validated());
+        $gratitude = Gratitude::where('gratitudeNumber', $gratitude_number)->firstOrFail();
+        $point = $this->earnedPointService->add($gratitude, $request->all());
 
         return response()->json(['message' => 'Points added', 'point' => $point], 201);
     }
@@ -233,10 +245,10 @@ class GratitudeController extends Controller
     }
 
     // Bonus Points
-    public function storeBonus(StoreBonusPointRequest $request, string $gratitudeNumber)
+    public function storeBonus(Request $request, string $gratitudeNumber)
     {
         $gratitude = Gratitude::where('gratitudeNumber', $gratitudeNumber)->firstOrFail();
-        $point = $this->bonusPointService->add($gratitude, $request->validated());
+        $point = $this->bonusPointService->add($gratitude, $request->all());
 
         return response()->json(['message' => 'Bonus points added', 'point' => $point], 201);
     }

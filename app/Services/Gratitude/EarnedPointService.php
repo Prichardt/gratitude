@@ -18,7 +18,7 @@ class EarnedPointService
         $level = $this->pointExpiryService->resolveLevelForGratitude($gratitude);
 
         $point = EarnedPoint::create([
-            'user_id' => $gratitude->user_id,
+            'user_id' => $data['user_id'],
             'gratitudeNumber' => $gratitude->gratitudeNumber,
             'date' => $usableDate,
             'category' => $data['category'],

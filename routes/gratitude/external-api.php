@@ -13,6 +13,7 @@ Route::prefix('gratitude')->name('gratitude.')->group(function () {
     Route::get('{gratitudeNumber}', [GratitudeController::class, 'show'])->name('show');
 
     // Earned Points
+    Route::post('store/earned/points/{gratitude_number}', [GratitudeController::class, 'storeEarned'])->name('earned.store');
     Route::post('{gratitudeNumber}/earned', [GratitudeController::class, 'storeEarned'])->name('earned.store');
     Route::put('{gratitudeNumber}/earned/{id}', [GratitudeController::class, 'updateEarned'])->name('earned.update');
     Route::delete('{gratitudeNumber}/earned/{id}', [GratitudeController::class, 'destroyEarned'])->name('earned.destroy');
