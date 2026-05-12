@@ -28,10 +28,9 @@ class GratitudeService
             $level = $data['level'] ?? $this->defaultLevelName();
             $gratitudeNumber = $data['gratitudeNumber']
                 ?? $data['gratitude_number']
-                ?? $this->generateGratitudeNumber($data['_prefix'] ?? 'G');
+                ?? $this->generateGratitudeNumber($data['_prefix'] ?? 'G'); 
 
-            return Gratitude::create([
-                'old_id' => $data['old_id'] ?? null,
+            return Gratitude::create([              
                 'gratitudeNumber' => $gratitudeNumber,
                 'totalPoints' => 0,
                 'totalEarnedPoints' => 0,

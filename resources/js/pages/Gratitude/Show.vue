@@ -409,7 +409,7 @@ const exportPointsHistoryPdf = () => openPointsHistoryPrintWindow();
     <AppLayout :breadcrumbs="breadcrumbs">
         <Head :title="`Gratitude #${gratitudeNumber}`" />
 
-        <div class="px-4 py-6 sm:px-6 lg:px-8 max-w-[1600px] space-y-6 pb-20">
+        <div class="px-4 py-6 sm:px-6 lg:px-8  space-y-6 pb-20">
             <!-- Header Row -->
             <div class="flex items-center justify-between pb-6 border-b border-border/50 mb-6">
                 <div>

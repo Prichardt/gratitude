@@ -53,75 +53,23 @@ class GratitudeController extends Controller
 
     public function store(Request $request)
     {
-        if (
-            $request->filled('gratitudeNumber')
-            && $request->filled('gratitude_number')
-            && $request->input('gratitudeNumber') !== $request->input('gratitude_number')
-        ) {
-            throw ValidationException::withMessages([
-                'gratitude_number' => 'The gratitude_number and gratitudeNumber fields must match when both are provided.',
-            ]);
-        }
-
+       
         $validated = $request->validate([
-            'old_id'              => ['nullable', 'integer'],
-            'category'            => ['nullable'],          // int, string, or single-element array
-            'gratitudeNumber'     => ['nullable', 'string', 'max:255'],
-            'gratitude_number'    => ['nullable', 'string', 'max:255'],
-            'level'               => ['nullable', 'string', 'max:255', 'exists:gratitude_levels,name'],
-            'level_obtained_at'   => ['nullable', 'date'],
-            'status'              => ['nullable', 'string', 'max:255'],
-            'statusChange'        => ['nullable', 'string', 'max:255'],
-            'statusChangeReason'  => ['nullable', 'string', 'max:255'],
-            'systemLevelUpdate'   => ['nullable', 'boolean'],
-            'is_active'           => ['nullable', 'boolean'],
-            'importStatus'        => ['nullable', 'boolean'],
-            'expires_at'          => ['nullable', 'date'],
+            'category' => 'nullable|array',
+            'category.*' => 'integer|in:1,2,3',
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'client_id' => 'required|integer',
+            'gratitude_number' => 'nullable|string|max:255|unique:gratitudes,gratitudeNumber',
         ]);
-
-        // ── 1. Check for an existing account ─────────────────────────────────
-
-        // By old_id (most reliable cross-system identifier)
-        if (! empty($validated['old_id'])) {
-            $existing = Gratitude::where('old_id', $validated['old_id'])->first();
-            if ($existing) {
-                return response()->json([
-                    'message'        => 'Gratitude account already exists',
-                    'gratitude'      => $existing,
-                    'already_exists' => true,
-                ], 200);
-            }
-        }
-
-        // By explicit gratitude number if the caller supplied one
-        $requestedNumber = $validated['gratitudeNumber'] ?? $validated['gratitude_number'] ?? null;
-        if ($requestedNumber) {
-            $existing = Gratitude::where('gratitudeNumber', $requestedNumber)->first();
-            if ($existing) {
-                return response()->json([
-                    'message'        => 'Gratitude account already exists',
-                    'gratitude'      => $existing,
-                    'already_exists' => true,
-                ], 200);
-            }
-        }
-
-        // ── 2. Resolve prefix from category ──────────────────────────────────
-        //
-        // Category can arrive as an int, a numeric string, or a single-element
-        // array (e.g. [1]).  $category[0] mirrors the caller's own convention.
-        //
-        //   1 → Guest                 → G
-        //   2 → Guest Of Travel Agency → T
-        //   3 → Travel Agency Partner  → P
-        //   anything else              → G (default)
+    
 
         $prefixes   = ['1' => 'G', '2' => 'T', '3' => 'P'];
         $category   = $validated['category'] ?? null;
         $categoryId = is_array($category) ? ($category[0] ?? null) : $category;
         $prefix     = $prefixes[(string) $categoryId] ?? 'G';
 
-        // ── 3. Create the account ─────────────────────────────────────────────
 
         $gratitude = $this->gratitudeService->createAccount(
             array_merge($validated, ['_prefix' => $prefix])

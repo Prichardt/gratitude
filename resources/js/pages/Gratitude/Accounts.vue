@@ -136,7 +136,7 @@ const syncBalance = async (gratitudeNumber: string) => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <Head title="Gratitude Accounts" />
 
-        <div class="px-4 py-6 space-y-8 sm:px-6">
+        <div class="px-4 py-6  sm:px-6">
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-3xl font-bold tracking-tight text-foreground">Gratitude Accounts</h1>
